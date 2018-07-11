@@ -1,1 +1,1 @@
-# weakly-VRD
+# weakly-vrd
