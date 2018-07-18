@@ -26,6 +26,6 @@ class Solver(generic_solver.GenericSolver):
 		return self.loss_history[iteration]
 
 LBL_PREDICATE = 'predicate'
-LBL_APPEARANCE = 'spatial'
+LBL_APPEARANCE = 'appearance'
 LBL_SPATIAL = 'spatial'
 LBL_STAGE2 = 'extra'
