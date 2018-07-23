@@ -1,3 +1,4 @@
+import torch
 
 class GenericSolver:
 	def __init__(self, model, optimizer, **opts):
@@ -7,11 +8,12 @@ class GenericSolver:
 		self.supervision = opts.get('supervision', WEAK)
 		self.verbose = opts.get('verbose', False)
 		self.print_every = opts.get('print_every', 1000)
+		self.num_epochs = opts.get('num_epochs', 9)
 	
 	# @arg traindata should be a Dataloader
 	# @arg testdata should be a tuple of (X,Y)
 	def train(self, traindata, testdata):
-		num_iterations = self.num_epochs * len(self.traindata)
+		num_iterations = self.num_epochs * len(traindata)
 		self.loss_history = torch.Tensor(num_iterations)
 
 		if self.cuda: self.model.cuda()
