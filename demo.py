@@ -12,7 +12,14 @@ layer_widths = [1000, 2000, 800, 71]
 linear_layers = [nn.Linear(layer_widths[l-1], layer_widths[l]) for l in range(1,len(layer_widths))]
 
 print('Building model, optimizer, solver...')
-model = nn.Sequential(*linear_layers)
+model = nn.Sequential(
+	linear_layers[0],
+	nn.ReLU(),
+	nn.BatchNorm1d(linear_layers[0].out_features),
+	linear_layers[1],
+	nn.ReLU(),
+	linear_layers[2],
+)
 optimizer = torch.optim.Adam(model.parameters())
 solver = solver.Solver(model, optimizer, verbose=True, print_every=10)
 
