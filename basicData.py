@@ -102,32 +102,32 @@ class BasicData(Dataset):
         }
         return output
 
-if __name__ == "__main__":
-    print('testing...init')
-    dataroot = '/Users/Linen/GoogleDrive/data/unrel/vrd-dataset'
-    myData = BasicData(dataroot)
-    # print(myData)
-    # print(type(myData.objects))
-    # print(type(myData.predicates))
-    # test = myData.test_pairs
-    # print('testing...len')
-    # print('traing set length:', len(myData))
-    print('testing...predicate')
-    pred = myData.loadPredicate(0)
-    print(myData.loadPredicate(0))
-    subject = myData.loadSubject(0)
-    print(f'testing...subject\n{subject}')
-    obj = myData.loadObject(0)
-    print(f'testing...object\n{obj}')
-    triplet = myData.loadTriplet(0)
-    print(f'triplets:......<{triplet[0]},{triplet[1]},{triplet[2]}>')
-    print('testing...spatial')
-    spatial = myData.loadSpatial(0)
-    shape = spatial.shape
-    print(f'{shape}')
-    print('testing...appearance')
-    appearance = myData.loadAppearance(1)
-    length = appearance.shape
-    print(f'{length}')
-    print('testing...__getitem__')
-    print(myData[0])
+# if __name__ == "__main__":
+#     print('testing...init')
+#     dataroot = '/Users/Linen/GoogleDrive/data/unrel/vrd-dataset'
+#     myData = BasicData(dataroot)
+#     # print(myData)
+#     # print(type(myData.objects))
+#     # print(type(myData.predicates))
+#     # test = myData.test_pairs
+#     # print('testing...len')
+#     # print('traing set length:', len(myData))
+#     print('testing...predicate')
+#     pred = myData.loadPredicate(0)
+#     print(myData.loadPredicate(0))
+#     subject = myData.loadSubject(0)
+#     print(f'testing...subject\n{subject}')
+#     obj = myData.loadObject(0)
+#     print(f'testing...object\n{obj}')
+#     triplet = myData.loadTriplet(0)
+#     print(f'triplets:......<{triplet[0]},{triplet[1]},{triplet[2]}>')
+#     print('testing...spatial')
+#     spatial = myData.loadSpatial(0)
+#     shape = spatial.shape
+#     print(f'{shape}')
+#     print('testing...appearance')
+#     appearance = myData.loadAppearance(1)
+#     length = appearance.shape
+#     print(f'{length}')
+#     print('testing...__getitem__')
+#     print(myData[0])
