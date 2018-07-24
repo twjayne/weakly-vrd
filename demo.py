@@ -15,7 +15,6 @@ print('Building model, optimizer, solver...')
 model = nn.Sequential(
 	linear_layers[0],
 	nn.ReLU(),
-	nn.BatchNorm1d(linear_layers[0].out_features),
 	linear_layers[1],
 	nn.ReLU(),
 	linear_layers[2],
