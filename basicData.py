@@ -7,8 +7,19 @@ class BasicData(Dataset):
     def __init__(self, dataroot, split, **kwargs):
         # dataroot is the path to data
         self.rootdir = dataroot
-        sup = kwargs.get('pairs', 'annotated')
-        data = scipy.io.loadmat(os.path.join(dataroot, split, sup, 'pairs.mat'))['pairs'][0][0]
+        self.split = split
+        self.kwargs = kwargs
+        self.rel_cat = None
+        self.sub_cat = None
+        self.obj_cat = None
+        self.rel_id = None
+        self.sub_id = None
+        self.obj_id = None
+        self.supervision = kwargs.get('supvervision', 'full')
+        
+        pair = kwargs.get('pairs', 'annotated')
+        data = scipy.io.loadmat(os.path.join(dataroot, split, pair, 'pairs.mat'))['pairs'][0][0]
+
         # test = scipy.io.loadmat(os.path.join(dataroot, 'test/annotated/pairs.mat'))['pairs'][0][0] # test data to be separated into different datasets
         header = ['im_id','rel_id','sub_id','obj_id','sub_cat','rel_cat','obj_cat','subject_box','object_box']
         pairs = {}
@@ -20,9 +31,7 @@ class BasicData(Dataset):
         # self.test_pairs = test_pairs
         self.objects = scipy.io.loadmat(os.path.join(dataroot, 'vocab_objects.mat'))['vocab_objects']
         self.predicates = scipy.io.loadmat(os.path.join(dataroot, 'vocab_predicates.mat'))['vocab_predicates']
-        self.rel_cat = None
-        self.sub_cat = None
-        self.obj_cat = None
+
 
     def __len__(self):
         # length of dataset, equivalent to number of triplets in the training set
@@ -34,8 +43,9 @@ class BasicData(Dataset):
     def loadSpatial(self, index):
         i = index
         im_id = int(self.pairs['im_id'][i][0])
-        spatial_path = os.path.join(self.rootdir, 'train/annotated/features/spatial-full', '%d.mat' % im_id)
+        spatial_path = os.path.join(self.rootdir, self.split, self.kwargs['pairs'], 'features/spatial-%s' % self.kwargs['supervision'], '%d.mat' % im_id)
         rel_id = int(self.pairs['rel_id'][i][0])
+        self.rel_id = rel_id
         data = scipy.io.loadmat(spatial_path)['spatial']
         rels = {}
         for rel in data:
@@ -46,8 +56,9 @@ class BasicData(Dataset):
         i = index
 
         im_id = int(self.pairs['im_id'][i][0])
-        app_path = os.path.join(self.rootdir, 'train/annotated/features/appearance-full', '%d.mat' % im_id)
+        app_path = os.path.join(self.rootdir, self.split, self.kwargs['pairs'], 'features/appearance-%s' % self.kwargs['supervision'], '%d.mat' % im_id)
         sub_id = int(self.pairs['sub_id'][i][0])
+        self.sub_id = sub_id
         app = scipy.io.loadmat(app_path)['appearance']
         apps = {}
         for o in app:
@@ -55,6 +66,7 @@ class BasicData(Dataset):
         sub = apps[sub_id]
 
         obj_id = int(self.pairs['obj_id'][i][0])
+        self.obj_id = obj_id
         obj = apps[obj_id]
         return np.concatenate((sub,obj),axis=0)
 
@@ -64,8 +76,8 @@ class BasicData(Dataset):
     def loadPredicate(self, index):
         i = index
 
-        rel_id = int(self.pairs['rel_id'][i][0])
-        rel_cat = self.pairs['rel_cat'][rel_id-1][0]-1 # reference number in matlab indexed from 1, but python indexd from 0 so when running in python need to -1
+        # rel_id = int(self.pairs['rel_id'][i][0])
+        rel_cat = self.pairs['rel_cat'][i][0] - 1 # reference number in matlab indexed from 1, but python indexd from 0 so when running in python need to -1
         self.rel_cat = rel_cat
         # print(f'rel_id: {rel_id}, rel_cat: {rel_cat}')
         return self.predicates[rel_cat][0][0]
@@ -74,16 +86,16 @@ class BasicData(Dataset):
     def loadSubject(self, index):
         i = index
         
-        sub_id = int(self.pairs['sub_id'][i][0])
-        sub_cat = self.pairs['sub_cat'][sub_id-1][0]-1
+        # sub_id = int(self.pairs['sub_id'][i][0])
+        sub_cat = self.pairs['sub_cat'][i][0]-1
         self.sub_cat = sub_cat
         return self.objects[sub_cat][0][0]
 
     def loadObject(self, index, ):
         i = index
         
-        obj_id = int(self.pairs['obj_id'][i][0])
-        obj_cat = self.pairs['obj_cat'][obj_id-1][0]-1
+        # obj_id = int(self.pairs['obj_id'][i][0])
+        obj_cat = self.pairs['obj_cat'][i][0]-1
         self.obj_cat = obj_cat
         return self.objects[obj_cat][0][0]
 
@@ -95,16 +107,20 @@ class BasicData(Dataset):
             'subject': self.loadSubject(index),
             'object': self.loadObject(index),
             'triplet': self.loadTriplet(index),
-            'predicate_index': self.rel_cat,
-            'subject_index': self.sub_cat,
-            'object_index': self.obj_cat
+            'predicate_cat_index': self.rel_cat,
+            'subject_cat_index': self.sub_cat,
+            'object_cat_index': self.obj_cat,
+            'sub_id': self.sub_id,
+            'obj_id': self.obj_id,
+            'rel_id': self.rel_id
         }
         return output
 
-# if __name__ == "__main__":
-#     print('testing...init')
-#     dataroot = '/Users/Linen/GoogleDrive/data/unrel/vrd-dataset'
-#     myData = BasicData(dataroot,'train', pairs='annotated')
+if __name__ == "__main__":
+    # print('testing...init')
+    dataroot = '/Users/Linen/GoogleDrive/data/unrel/vrd-dataset'
+    dataroot5 = '/data/tyler/unrel/data/vrd-dataset'
+    myData = BasicData(dataroot5,'train', pairs='annotated')
 #     # print(myData)
 #     # print(type(myData.objects))
 #     # print(type(myData.predicates))
@@ -129,4 +145,6 @@ class BasicData(Dataset):
 #     length = appearance.shape
 #     print(f'{length}')
 #     print('testing...__getitem__')
-#     print(myData[0])
+    # print(myData[25830])
+    for n in range(len(myData)):
+        a = myData[n]
