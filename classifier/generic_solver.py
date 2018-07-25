@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+import time
 import pdb
 
 class GenericSolver:
@@ -30,9 +31,11 @@ class GenericSolver:
 		for epoch_i in range(self.num_epochs):
 			for batch_i, batch in enumerate(trainloader):
 				# pdb.set_trace()
+				tic = time.time()
 				loss = self._train_step(iteration_i, batch['X'], batch['y'])
+				toc = time.time()
 				if self.verbose and batch_i % self.print_every == 0:
-					print('(%5d/%d) loss %e' % (iteration_i, num_iterations, loss))
+					print('(%5d/%d) loss %e\t\t(%e)' % (iteration_i, num_iterations, loss, toc - tic / len(batch['y'])))
 				if batch_i % self.test_every == 0:
 					for testbatch in testloader:
 						loss = self._test(testbatch['X'], testbatch['y'])
@@ -53,11 +56,9 @@ class GenericSolver:
 		return self._calc_loss(test_X, test_Y)
 	
 	def _calc_loss(self, batch_X, batch_Y):
-		# if self.cuda:
-		if True:
-			self.model.cpu()
-			batch_X.cpu()
-			batch_Y.cpu()
+		if self.cuda:
+			batch_X = batch_X.cuda()
+			batch_Y = batch_Y.cuda()
 		self.prediction = self.model(batch_X)
 		return self.loss_fn( self.prediction, batch_Y.reshape(-1) )
 
