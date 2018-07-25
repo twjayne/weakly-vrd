@@ -3,7 +3,7 @@ import pdb
 
 class Example(dict):
 	def __init__(self, dic, spatial, appearance, **opts):
-		for key, val in dic.iteritems():
+		for key, val in dic.items():
 			self._set(key, val)
 		self._set('spatial', spatial)
 		self._set('appearance', appearance)

@@ -33,9 +33,9 @@ class GenericSolver:
 				# pdb.set_trace()
 				tic = time.time()
 				loss = self._train_step(iteration_i, batch['X'], batch['y'])
-				toc = time.time()
+				toc = (time.time() - tic) / len(batch['y'])
 				if self.verbose and batch_i % self.print_every == 0:
-					print('(%5d/%d) loss %e\t\t(%e)' % (iteration_i, num_iterations, loss, toc - tic / len(batch['y'])))
+					print('(%5d/%d) loss %e\t\t(%e)' % (iteration_i, num_iterations, loss, toc))
 				if batch_i % self.test_every == 0:
 					for testbatch in testloader:
 						loss = self._test(testbatch['X'], testbatch['y'])

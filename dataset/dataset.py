@@ -4,8 +4,7 @@ import torch.utils.data.dataset
 import scipy.io
 import os
 import numpy as np
-assert np.__version__ == '1.14.5'
-from example import BasicExample
+from .example import BasicExample
 import pdb
 
 class Dataset(torch.utils.data.dataset.Dataset):
