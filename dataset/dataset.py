@@ -1,17 +1,25 @@
+import torch
+assert torch.__version__ == '0.4.0'
 import torch.utils.data.dataset
 import scipy.io
 import os
 import numpy as np
-from example import Example
+assert np.__version__ == '1.14.5'
+from example import BasicExample
 import pdb
 
 class Dataset(torch.utils.data.dataset.Dataset):
     def __init__(self, dataroot, split, **kwargs):
         self.split = split
+        self.example_klass = kwargs.get('klass', BasicExample)
         self.sup = kwargs.get('pairs', 'candidates')
         self.supervision = kwargs.get('supervision', 'weak')
         self.rootdir = dataroot # dataroot is the path to data
         self.pairs = scipy.io.loadmat(os.path.join(dataroot, split, self.sup, 'pairs.mat'))['pairs'][0,0]
+        for key in self.__keys():
+            if key[-3:] == '_id': self.pairs[key] = self.pairs[key].astype(np.int32).reshape(-1)
+            if key[-4:] == '_cat': self.pairs[key] -= 1
+            if key[-4:] == '_box': self.pairs[key] = torch.from_numpy(self.pairs[key].astype(np.int32))
         self.objects = scipy.io.loadmat(os.path.join(dataroot, 'vocab_objects.mat'))['vocab_objects']
         self.predicates = scipy.io.loadmat(os.path.join(dataroot, 'vocab_predicates.mat'))['vocab_predicates']
         self.__file_cache = {}
@@ -20,11 +28,8 @@ class Dataset(torch.utils.data.dataset.Dataset):
         return len(self.pairs['rel_id'])
 
     def __getitem__(self, i):
-        output = {}
-        for key in self.__keys():
-            output[key] = self.pairs[key][i]
-            if key[-4:] == '_cat': output[key] -= 1
-        return Example(output, 
+        copyvals = { k: self.pairs[k][i] for k in self.__keys() }
+        return self.example_klass(copyvals, 
             self._spatial_features(i),
             self._appearance_features(i))
 
@@ -35,21 +40,21 @@ class Dataset(torch.utils.data.dataset.Dataset):
         dkey = '%s<v>' % mkey
         if self.__file_cache.get(mkey, None) != fpath:
             self.__file_cache[mkey] = fpath
-            self.__file_cache[dkey] = scipy.io.loadmat(fpath)[mkey]
+            self.__file_cache[dkey] = torch.from_numpy(scipy.io.loadmat(fpath)[mkey])
         return self.__file_cache[dkey]
 
     # @arg key is 'spatial' or 'appearance'
     # @arg i is the index in self.pairs
     # @arg ent_id is the id of the sub or obj
     def _load_matlab_features(self, key, i, ent_id):
-        img_i = self.pairs['im_id'][i][0]
+        img_i = self.pairs['im_id'][i]
         selected_dir = '%s/%s/features/%s-%s' % (self.split, self.sup, key, self.supervision)
         path = os.path.join(self.rootdir, selected_dir, '%d.mat' % img_i)
         rows = self._file_cache_get(key, path)
         # The first column indicates the id
         for row in rows:
-            if row[0] == ent_id: break
-        assert row[0] == ent_id
+            if int(row[0]) == ent_id: break
+        assert int(row[0]) == ent_id
         return row[1:]
 
     def _spatial_features(self, i):
