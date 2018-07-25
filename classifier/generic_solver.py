@@ -6,6 +6,7 @@ class GenericSolver:
 	def __init__(self, model, optimizer, **opts):
 		self.model = model
 		self.optimizer = optimizer
+		self.scheduler = opts.get('scheduler', None)
 		self.cuda = opts.get('cuda', True)
 		self.supervision = opts.get('supervision', WEAK)
 		self.verbose = opts.get('verbose', False)
@@ -36,6 +37,7 @@ class GenericSolver:
 					for testbatch in testloader:
 						loss = self._test(testbatch['X'], testbatch['y'])
 						print('=== TEST === loss %e' % (loss,))
+						if self.scheduler: self.scheduler.step(loss)
 				iteration_i += 1
 	
 	def _train_step(self, iteration, batch_X, batch_Y):

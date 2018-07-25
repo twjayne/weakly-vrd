@@ -22,7 +22,8 @@ model = nn.Sequential(
 	linear_layers[2],
 ).double()
 optimizer = torch.optim.Adam(model.parameters())
-solver = Solver(model, optimizer, verbose=True, print_every=10)
+scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer)
+solver = Solver(model, optimizer, verbose=True, scheduler=scheduler)
 
 print('Initializing dataset')
 dataroot = os.path.join(os.path.expanduser('~'), 'proj/unrel/data/vrd-dataset')
