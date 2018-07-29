@@ -49,7 +49,7 @@ print('Initializing dataset')
 dataroot = os.path.join(os.path.expanduser('~'), 'proj/weakly-vrd/data/vrd-dataset')
 _trainset = dset.Dataset(dataroot, 'train', pairs='annotated')
 traindata = DataLoader(_trainset, batch_size=opts.batch_size, shuffle=True, num_workers=4)
-if opts.train_size is not None: # if --N
+if opts.train_size: # if --N
 	def train_size(unused): return opts.train_size
 	_trainset.__class__.__len__ = train_size
 if opts.do_validation: # Defatult True
