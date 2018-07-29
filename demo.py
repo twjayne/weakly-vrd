@@ -10,6 +10,8 @@ from optparse import OptionParser
 
 import dataset.dataset as dset
 
+DEFAULT_DATAROOT = os.path.join(os.path.expanduser('~'), 'proj/weakly-vrd/data/vrd-dataset')
+
 print('starting ...')
 
 parser = OptionParser()
@@ -19,6 +21,7 @@ parser.add_option('--bs', dest='batch_size', default=32, type="int")
 parser.add_option('--ep', dest='num_epochs', default=30, type="int")
 parser.add_option('-N', dest='train_size', default=None, type="int")
 parser.add_option('--noval', action='store_false', default=True, dest='do_validation')
+parser.add_option('--data', dest='dataroot', default=DEFAULT_DATAROOT)
 opts, args = parser.parse_args()
 print(opts)
 
@@ -40,13 +43,13 @@ model = nn.Sequential(
 # Remove batchnorm if N == 1
 if opts.train_size == 1:
 	model = nn.Sequential( *[m for m in model.children() if type(m) is not nn.BatchNorm1d] )
-optimizer = torch.optim.Adam(model.parameters())
+optimizer = torch.optim.Adam(model.parameters(), lr=opts.lr)
 scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, verbose=True)
 solver = Solver(model, optimizer, verbose=True, scheduler=scheduler, lr=opts.lr, num_epochs=opts.num_epochs)
 
 # Initialize train and test sets
 print('Initializing dataset')
-dataroot = os.path.join(os.path.expanduser('~'), 'proj/weakly-vrd/data/vrd-dataset')
+dataroot = opts.dataroot
 _trainset = dset.Dataset(dataroot, 'train', pairs='annotated')
 traindata = DataLoader(_trainset, batch_size=opts.batch_size, shuffle=True, num_workers=4)
 if opts.train_size: # if --N
