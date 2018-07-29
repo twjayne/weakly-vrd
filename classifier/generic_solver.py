@@ -35,11 +35,12 @@ class GenericSolver:
 				loss = self._train_step(iteration_i, batch['X'], batch['y'])
 				toc = (time.time() - tic) / len(batch['y'])
 				if self.verbose and batch_i % self.print_every == 0:
-					print('(%5d/%d) loss %e\t\t(%e)' % (iteration_i, num_iterations, loss, toc))
-				if batch_i % self.test_every == 0:
+					#print('(%5d/%d) loss %e\t\t(%e)' % (iteration_i, num_iterations, loss, toc))
+					print('(%5d/%d) loss %e' % (iteration_i, num_iterations, loss))
+				if testloader is not None and batch_i % self.test_every == 0:
 					for testbatch in testloader:
 						loss = self._test(testbatch['X'], testbatch['y'])
-						print('=== TEST === loss %e' % (loss,))
+						print('\t\t=== TEST === loss %e' % (loss,))
 						if self.scheduler: self.scheduler.step(loss)
 				iteration_i += 1
 	
