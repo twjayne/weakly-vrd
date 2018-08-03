@@ -25,27 +25,25 @@ parser.add_option('--data', dest='dataroot', default=DEFAULT_DATAROOT)
 opts, args = parser.parse_args()
 print(opts)
 
-# Define topography
-layer_widths = [1000, 2000, 800, 70]
-linear_layers = [nn.Linear(layer_widths[l-1], layer_widths[l]) for l in range(1,len(layer_widths))]
 
-# Define model, optimizer, solver
-print('Building model, optimizer, solver...')
-model = nn.Sequential(
-	linear_layers[0],
-	nn.BatchNorm1d(2000),
-	nn.ReLU(),
-	linear_layers[1],
-	nn.BatchNorm1d(800),
-	nn.ReLU(),
-	linear_layers[2],
-).double()
-# Remove batchnorm if N == 1
-if opts.train_size == 1:
-	model = nn.Sequential( *[m for m in model.children() if type(m) is not nn.BatchNorm1d] )
+# Define model
+print('Building model')
+layer_widths = [1000, 2000, 2000, 70]
+print('Layer widths: %s' % (' '.join((str(x) for x in layer_widths))))
+def model_generator(layer_widths, is_batch_gt_1):
+	for i in range(1, len(layer_widths)):
+		yield nn.Linear(layer_widths[i-1], layer_widths[i])
+		if i < len(layer_widths) - 1: # All except the last
+			yield nn.BatchNorm1d(layer_widths[i])
+			yield nn.ReLU()
+layers = list(model_generator(layer_widths, opts.train_size == 1))
+model  = nn.Sequential(*layers).double()
+
+# Define optimizer, scheduler, solver
+print('Building optimizer, scheduler, solver...')
 optimizer = torch.optim.Adam(model.parameters(), lr=opts.lr)
 scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, verbose=True)
-solver = Solver(model, optimizer, verbose=True, scheduler=scheduler, lr=opts.lr, num_epochs=opts.num_epochs)
+solver    = Solver(model, optimizer, verbose=True, scheduler=scheduler, lr=opts.lr, num_epochs=opts.num_epochs)
 
 # Initialize train and test sets
 print('Initializing dataset')
