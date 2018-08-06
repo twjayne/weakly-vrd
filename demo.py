@@ -1,35 +1,47 @@
 import numpy as np
 import torch
-assert torch.__version__ == '0.4.0'
+assert torch.__version__.startswith('0.4'), 'wanted version 0.4, got %s' % torch.__version__
 import os, datetime as dt
 import torch.nn as nn
 from classifier.generic_solver import GenericSolver as Solver
 from torch.utils.data import DataLoader
-import pdb
 from optparse import OptionParser
+import pdb
 
+import util.logger as logger
 import dataset.dataset as dset
+
 
 DEFAULT_DATAROOT = os.path.join(os.path.expanduser('~'), 'proj/weakly-vrd/data/vrd-dataset')
 
-print('starting ...')
 
 parser = OptionParser()
-parser.add_option('--cpu', action='store_false', default=True, dest='cuda')
-parser.add_option('--lr', dest='lr', default=None, type="float")
+parser.add_option('--data', dest='dataroot', default=DEFAULT_DATAROOT)
+parser.add_option('--lr', dest='lr', default=0.001, type="float")
 parser.add_option('--bs', dest='batch_size', default=32, type="int")
 parser.add_option('--ep', dest='num_epochs', default=30, type="int")
 parser.add_option('-N', dest='train_size', default=None, type="int")
 parser.add_option('--noval', action='store_false', default=True, dest='do_validation')
-parser.add_option('--data', dest='dataroot', default=DEFAULT_DATAROOT)
+parser.add_option('--cpu', action='store_false', default=True, dest='cuda')
+parser.add_option('--log', dest='logdir', default='log')
+parser.add_option('--geom', dest='geometry', default='1000 2000 2000 70')
+parser.add_option('--nosched', dest='no_scheduler', default=False, action='store_true')
+parser.add_option('--patience', dest='patience', default=None, type="int")
+parser.add_option('--test_every', dest='test_every', default=None)
+parser.add_option('--print_every', dest='test_every', default=None)
 opts, args = parser.parse_args()
-print(opts)
 
+logger.Logger(opts.logdir,
+	'' if opts.do_validation else 'noval',
+	'N-%d ep-%d lr-%d geom-%s hash-%d.log' %
+	(opts.train_size or 0, opts.num_epochs, opts.lr, opts.geometry, hash(frozenset(opts.__dict__))))
+print('starting ...')
+print(opts)
 
 # Define model
 print('Building model')
-layer_widths = [1000, 2000, 2000, 70]
-print('Layer widths: %s' % (' '.join((str(x) for x in layer_widths))))
+layer_widths = [int(x) for x in opts.geometry.split(' ')]
+print('Geometry: %s' % (' '.join((str(x) for x in layer_widths))))
 def model_generator(layer_widths, is_batch_gt_1):
 	for i in range(1, len(layer_widths)):
 		yield nn.Linear(layer_widths[i-1], layer_widths[i])
@@ -42,7 +54,7 @@ model  = nn.Sequential(*layers).double()
 # Define optimizer, scheduler, solver
 print('Building optimizer, scheduler, solver...')
 optimizer = torch.optim.Adam(model.parameters(), lr=opts.lr)
-scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, verbose=True)
+scheduler = None if opts.no_scheduler else torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, verbose=True, patience=opts.patience)
 solver    = Solver(model, optimizer, verbose=True, scheduler=scheduler, lr=opts.lr, num_epochs=opts.num_epochs)
 
 # Initialize train and test sets

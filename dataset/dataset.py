@@ -1,5 +1,5 @@
 import torch
-assert torch.__version__ == '0.4.0'
+assert torch.__version__.startswith('0.4'), 'wanted version 0.4, got %s' % torch.__version__
 import torch.utils.data.dataset
 import scipy.io
 import os

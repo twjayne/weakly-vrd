@@ -5,17 +5,17 @@ import pdb
 
 class GenericSolver:
 	def __init__(self, model, optimizer, **opts):
-		self.model = model
-		self.optimizer = optimizer
-		self.scheduler = opts.get('scheduler', None)
-		self.cuda = opts.get('cuda', True)
+		self.model       = model
+		self.optimizer   = optimizer
+		self.scheduler   = opts.get('scheduler', None)
+		self.cuda        = opts.get('cuda', True)
 		self.supervision = opts.get('supervision', WEAK)
-		self.verbose = opts.get('verbose', False)
-		self.num_epochs = opts.get('num_epochs', 9)
+		self.verbose     = opts.get('verbose', False)
+		self.num_epochs  = opts.get('num_epochs', 9)
 		self.print_every = opts.get('print_every', 20)
-		self.test_every = opts.get('test_every', 10)
-		self.loss_fn = opts.get('loss', nn.CrossEntropyLoss())
-		self.dtype = opts.get('dtype', torch.double)
+		self.test_every  = opts.get('test_every', 80)
+		self.loss_fn     = opts.get('loss', nn.CrossEntropyLoss())
+		self.dtype       = opts.get('dtype', torch.double)
 	
 	# @arg trainloader should be a Dataloader
 	# @arg testloader should be a Dataloader
