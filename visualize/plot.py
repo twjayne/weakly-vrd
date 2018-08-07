@@ -9,19 +9,25 @@
 
 import numpy as np
 import matplotlib.pyplot as plt
+import re
 import sys
+import pdb
 
-train_pattern = r'^\(ep\s+(\d+):\s+(\d+)/\d+\)\s+loss\s+(\S+)\s+acc\s+(\S+)'
+train_pattern = re.compile(r'^\(ep\s+(\d+):\s+(\d+)/\d+\)\s+loss (\S+)\s+acc (\S+)', re.MULTILINE)
 train_groups = [('epoch', np.int32),
 		('batch', np.int32),
 		('loss', np.float64),
 		('acc', np.float32)]
-test_pattern = r'=== TEST ===\(ep\s+(\d+):\s+(\d+)/\d+\)\s+loss (\S+)\s+acc (\S+)'
-test_groups = [('loss', np.float64),
+test_pattern = r'=== TEST === \(ep\s+(\d+):\s+(\d+)/\d+\)\s+loss (\S+)\s+acc (\S+)'
+test_groups = [('epoch', np.int32),
+		('batch', np.int32),
+		('loss', np.float64),
 		('acc', np.float32)]
 
 class Plotter:
-	def __init__(self, pattern, groups):
+	def __init__(self, pattern, groups, fig=None, ax=None):
+		self.fig = fig
+		self.ax = ax
 		self.pattern = pattern
 		self.groups = groups
 	def _line(self, fpath, ax, key):
@@ -29,20 +35,23 @@ class Plotter:
 		x = dat['batch'] if 'batch' in dat.dtype.names else np.arange(len(dat[key]))
 		ax.plot(x, dat[key])
 	def plot(self, fpaths, key):
-		fig, ax = plt.subplots(num='%s %s' % (self.__class__.__name__, key))
+		if self.fig and self.ax:
+			fig, ax = self.fig, self.ax
+		else:
+			fig, ax = plt.subplots(num='%s %s' % (self.__class__.__name__, key))
 		for fpath in fpaths:
 			self._line(fpath, ax, key)
 		ax.legend(fpaths, prop={'size': 6})
+		return fig, ax
 
 class TestPlotter(Plotter):
-	def __init__(self):
-		super(TestPlotter, self).__init__(test_pattern, test_groups)
-
+	def __init__(self, *args):
+		super(TestPlotter, self).__init__(test_pattern, test_groups, *args)
 
 class TrainPlotter(Plotter):
-	def __init__(self):
-		super(TrainPlotter, self).__init__(train_pattern, train_groups)
+	def __init__(self, *args):
+		super(TrainPlotter, self).__init__(train_pattern, train_groups, *args)
 
-TestPlotter().plot(sys.argv[1:], 'acc')
-TrainPlotter().plot(sys.argv[1:], 'acc')
+fig, ax = TestPlotter().plot(sys.argv[1:], 'acc')
+TrainPlotter(fig, ax).plot(sys.argv[1:], 'acc')
 plt.show()

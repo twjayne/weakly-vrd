@@ -42,7 +42,7 @@ class GenericSolver:
 					if batch_i % self.test_every == 0:
 						for testbatch in testloader:
 							loss = self._test(testbatch['X'], testbatch['y'])
-							print('\t\t=== TEST === loss %e\tacc %.3f' % (loss, self.acc))
+							print('\t\t=== TEST === (ep %3d: %5d/%d) loss %e\tacc %.3f' % (epoch_i, iteration_i, num_iterations, loss, self.acc))
 				elif self.scheduler: self.scheduler.step(loss)
 
 				iteration_i += 1

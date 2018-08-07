@@ -33,7 +33,7 @@ opts, args = parser.parse_args()
 
 logger.Logger(opts.logdir,
 	'' if opts.do_validation else 'noval',
-	'N-%d ep-%d lr-%d geom-%s hash-%d.log' %
+	'N-%d ep-%d lr-%f geom-%s hash-%d.log' %
 	(opts.train_size or 0, opts.num_epochs, opts.lr, opts.geometry, hash(frozenset(opts.__dict__))))
 print('starting ...')
 print(opts)
@@ -45,6 +45,7 @@ print('Geometry: %s' % (' '.join((str(x) for x in layer_widths))))
 def model_generator(layer_widths, is_batch_gt_1):
 	for i in range(1, len(layer_widths)):
 		yield nn.Linear(layer_widths[i-1], layer_widths[i])
+		yield nn.Dropout()
 		if i < len(layer_widths) - 1: # All except the last
 			yield nn.BatchNorm1d(layer_widths[i])
 			yield nn.ReLU()
