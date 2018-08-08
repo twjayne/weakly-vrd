@@ -28,8 +28,7 @@ class Plotter(object):
 		self.key = key
 		self.labels = []
 		for fpath in fpaths:
-			print('1', fpath)
-			self._line(fpath)
+			self._line(fpath if type(fpath) is str else fpath[0])
 		self.ax.legend(self.labels)
 	def _line(self, fpath):
 		dat = np.fromregex(fpath, pattern, groups)
@@ -39,12 +38,7 @@ class Plotter(object):
 			self.ax.plot(sub['batch'], sub[self.key])
 			self.labels.append(src)
 
-
-if len(sys.argv) > 1:
-	fpaths = sys.argv[1]
-elif len(sys.argv) > 2:
-	fpaths = sys.argv[1:]
-else:
-	glob.glob('log/*.log')
-Plotter('acc', fpaths)
-plt.show()
+if __name__ == '__main__':
+	fpaths = glob.glob('log/*.log') if len(sys.argv) < 2 else sys.argv[1:]
+	Plotter('acc', fpaths)
+	plt.show()

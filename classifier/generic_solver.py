@@ -54,9 +54,11 @@ class GenericSolver:
 
 	def _test(self, testloaders):
 		self.model.eval()
-		for testloader in testloaders:
+		for i,testloader in enumerate(testloaders):
 			for testbatch in testloader:
 				loss = self._calc_loss(testbatch['X'], testbatch['y'])
+				if i == 0 and self.scheduler:
+					self.scheduler.step(loss)
 				self._print(loss, testloader.dataset.name or 'TEST')
 
 	def _calc_loss(self, batch_X, batch_Y):
