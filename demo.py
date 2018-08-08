@@ -45,8 +45,8 @@ print('Geometry: %s' % (' '.join((str(x) for x in layer_widths))))
 def model_generator(layer_widths, is_batch_gt_1):
 	for i in range(1, len(layer_widths)):
 		yield nn.Linear(layer_widths[i-1], layer_widths[i])
-		yield nn.Dropout()
 		if i < len(layer_widths) - 1: # All except the last
+			yield nn.Dropout()
 			yield nn.BatchNorm1d(layer_widths[i])
 			yield nn.ReLU()
 layers = list(model_generator(layer_widths, opts.train_size == 1))
@@ -63,7 +63,7 @@ print('Initializing dataset')
 dataroot = opts.dataroot
 _trainset = dset.Dataset(dataroot, 'train', pairs='annotated')
 traindata = DataLoader(_trainset, batch_size=opts.batch_size, shuffle=True, num_workers=4)
-if opts.train_size: # if --N
+if opts.train_size: # if --N: override the __len__ method of the dataset so that only the first N items will be used
 	def train_size(unused): return opts.train_size
 	_trainset.__class__.__len__ = train_size
 if opts.do_validation: # Defatult True

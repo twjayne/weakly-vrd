@@ -18,10 +18,10 @@ class GenericSolver:
 		self.dtype       = opts.get('dtype', torch.double)
 	
 	# @arg trainloader should be a Dataloader
-	# @arg testloader should be a Dataloader
-	def train(self, trainloader, testloader):
-		num_iterations = self.num_epochs * len(trainloader)
-		self.loss_history = torch.Tensor(num_iterations)
+	# @arg testloaders should be a Dataloaders
+	def train(self, trainloader, *testloaders):
+		self.num_iterations = self.num_epochs * len(trainloader)
+		self.loss_history = torch.Tensor(self.num_iterations)
 
 		if self.cuda: self.model.cuda()
 
@@ -30,35 +30,35 @@ class GenericSolver:
 		print('%20s %s' % ('num_batches', len(trainloader),))
 		print('%20s %s' % ('batch_size', trainloader.batch_size,))
 
-		iteration_i = 0
-		for epoch_i in range(self.num_epochs):
+		self.iteration = 0
+		for self.epoch in range(self.num_epochs):
 			for batch_i, batch in enumerate(trainloader):
 				tic = time.time()
-				loss = self._train_step(iteration_i, batch['X'], batch['y'])
+				loss = self._train_step(batch['X'], batch['y'])
 				toc = (time.time() - tic) / len(batch['y'])
 				if self.verbose and batch_i % self.print_every == 0:
-					print('(ep %3d: %5d/%d) loss %e\tacc %.3f' % (epoch_i, iteration_i, num_iterations, loss, self.acc))
-				if testloader is not None:
-					if batch_i % self.test_every == 0:
-						for testbatch in testloader:
-							loss = self._test(testbatch['X'], testbatch['y'])
-							print('\t\t=== TEST === (ep %3d: %5d/%d) loss %e\tacc %.3f' % (epoch_i, iteration_i, num_iterations, loss, self.acc))
-				elif self.scheduler: self.scheduler.step(loss)
-
-				iteration_i += 1
+					self._print(loss)
+				if self.scheduler and testloaders is None:
+					self.scheduler.step(loss)
+				if testloaders and batch_i % self.test_every == 0:
+					self._test(testloaders)
+				self.iteration += 1
 	
-	def _train_step(self, iteration, batch_X, batch_Y):
+	def _train_step(self, batch_X, batch_Y):
 		self.model.train()
 		self.optimizer.zero_grad()
-		loss = self.loss_history[iteration] = self._calc_loss(batch_X, batch_Y)
+		loss = self.loss_history[self.iteration] = self._calc_loss(batch_X, batch_Y)
 		loss.backward()
 		self.optimizer.step()
-		return self.loss_history[iteration]
+		return self.loss_history[self.iteration]
 
-	def _test(self, test_X, test_Y):
+	def _test(self, testloaders):
 		self.model.eval()
-		return self._calc_loss(test_X, test_Y)
-	
+		for testloader in testloaders:
+			for testbatch in testloader:
+				loss = self._calc_loss(testbatch['X'], testbatch['y'])
+				self._print(loss, testloader.dataset.name or 'TEST')
+
 	def _calc_loss(self, batch_X, batch_Y):
 		if self.cuda:
 			batch_X = batch_X.cuda()
@@ -67,6 +67,9 @@ class GenericSolver:
 		correct_predictions = torch.sum( torch.argmax(self.prediction, 1) == batch_Y.transpose(1,0) ).item()
 		self.acc = correct_predictions / float(batch_X.shape[0])
 		return self.loss_fn( self.prediction, batch_Y.reshape(-1) )
+
+	def _print(self, loss, dataname='TRAIN'):
+		print('%12s (ep %3d: %5d/%d) loss %e\tacc %.3f' % (dataname, self.epoch, self.iteration, self.num_iterations, loss, self.acc))
 
 	def debug(self):
 		print('%20s %s' % ('optimizer', str(self.optimizer),))

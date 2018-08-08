@@ -11,6 +11,7 @@ class Dataset(torch.utils.data.dataset.Dataset):
     def __init__(self, dataroot, split, **kwargs):
         self.split = split
         self.example_klass = kwargs.get('klass', BasicExample)
+        self.name = kwargs.get('name', None)
         self.sup = kwargs.get('pairs', 'candidates')
         self.supervision = kwargs.get('supervision', 'weak')
         self.rootdir = dataroot # dataroot is the path to data
@@ -28,6 +29,7 @@ class Dataset(torch.utils.data.dataset.Dataset):
 
     def __getitem__(self, i):
         copyvals = { k: self.pairs[k][i] for k in self.__keys() }
+
         return self.example_klass(copyvals, 
             self._spatial_features(i),
             self._appearance_features(i))
@@ -63,6 +65,21 @@ class Dataset(torch.utils.data.dataset.Dataset):
         sub = self._load_matlab_features('appearance', i, self.pairs['sub_id'][i])
         obj = self._load_matlab_features('appearance', i, self.pairs['obj_id'][i])
         return np.concatenate((sub, obj))
+
+    def triplets(self):
+        keys = ('sub_cat', 'rel_cat', 'obj_cat')
+        return [tuple([self.pairs[key][i][0] for key in keys]) for i in range(len(self))]
+
+class Subset(torch.utils.data.dataset.Dataset):
+    def __init__(self, parent, indices, name=None):
+        self.parent = parent
+        self.indices = indices
+        self.name = name
+    def __len__(self):
+        return len(self.indices)
+    def __getitem__(self, i):
+        return self.parent[self.indices[i]]
+
 
 if __name__ == '__main__':
     import sys

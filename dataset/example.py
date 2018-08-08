@@ -17,6 +17,9 @@ class Example(dict):
 	def visual_features(self):
 		return np.concatenate((self.appearance, self.spatial))
 
+	def triplet(self):
+		return (self.sub_cat[0], self.rel_cat[0], self.obj_cat[0])
+
 	# !!! CrossEntropyLoss does not expect a one-hot encoded vector as the target, but class indices
 	def one_hot_label(self):
 		arr = np.zeros(self.n_klasses, self.dtype)
