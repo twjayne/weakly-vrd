@@ -11,47 +11,40 @@ import numpy as np
 import matplotlib.pyplot as plt
 import re
 import sys
+import glob
 import pdb
 
-train_pattern = re.compile(r'^\(ep\s+(\d+):\s+(\d+)/\d+\)\s+loss (\S+)\s+acc (\S+)', re.MULTILINE)
-train_groups = [('epoch', np.int32),
-		('batch', np.int32),
-		('loss', np.float64),
-		('acc', np.float32)]
-test_pattern = r'=== TEST === \(ep\s+(\d+):\s+(\d+)/\d+\)\s+loss (\S+)\s+acc (\S+)'
-test_groups = [('epoch', np.int32),
-		('batch', np.int32),
-		('loss', np.float64),
-		('acc', np.float32)]
+pattern = re.compile(r'^\s*(.*?)\s*\(ep\s+(\d+):\s+(\d+)/\d+\)\s+loss (\S+)\s+acc (\S+)', re.MULTILINE)
+groups = [('name', np.str_, 16),
+	('epoch', np.int32),
+	('batch', np.int32),
+	('loss', np.float64),
+	('acc', np.float32)]
 
-class Plotter:
-	def __init__(self, pattern, groups, fig=None, ax=None):
-		self.fig = fig
-		self.ax = ax
-		self.pattern = pattern
-		self.groups = groups
-	def _line(self, fpath, ax, key):
-		dat = np.fromregex(fpath, self.pattern, self.groups)
-		x = dat['batch'] if 'batch' in dat.dtype.names else np.arange(len(dat[key]))
-		ax.plot(x, dat[key])
-	def plot(self, fpaths, key):
-		if self.fig and self.ax:
-			fig, ax = self.fig, self.ax
-		else:
-			fig, ax = plt.subplots(num='%s %s' % (self.__class__.__name__, key))
+
+class Plotter(object):
+	def __init__(self, key, *fpaths):
+		self.fig, self.ax = plt.subplots(num='%s %s' % (self.__class__.__name__, key))
+		self.key = key
+		self.labels = []
 		for fpath in fpaths:
-			self._line(fpath, ax, key)
-		ax.legend(fpaths, prop={'size': 6})
-		return fig, ax
+			print('1', fpath)
+			self._line(fpath)
+		self.ax.legend(self.labels)
+	def _line(self, fpath):
+		dat = np.fromregex(fpath, pattern, groups)
+		srcs = set(dat['name'])
+		for src in srcs:
+			sub = dat[dat['name'] == src]
+			self.ax.plot(sub['batch'], sub[self.key])
+			self.labels.append(src)
 
-class TestPlotter(Plotter):
-	def __init__(self, *args):
-		super(TestPlotter, self).__init__(test_pattern, test_groups, *args)
 
-class TrainPlotter(Plotter):
-	def __init__(self, *args):
-		super(TrainPlotter, self).__init__(train_pattern, train_groups, *args)
-
-fig, ax = TestPlotter().plot(sys.argv[1:], 'acc')
-TrainPlotter(fig, ax).plot(sys.argv[1:], 'acc')
+if len(sys.argv) > 1:
+	fpaths = sys.argv[1]
+elif len(sys.argv) > 2:
+	fpaths = sys.argv[1:]
+else:
+	glob.glob('log/*.log')
+Plotter('acc', fpaths)
 plt.show()
