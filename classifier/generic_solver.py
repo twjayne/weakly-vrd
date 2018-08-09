@@ -16,6 +16,8 @@ class GenericSolver:
 		self.test_every  = opts.get('test_every', 80)
 		self.loss_fn     = opts.get('loss', nn.CrossEntropyLoss())
 		self.dtype       = opts.get('dtype', torch.double)
+		self.save_every  = opts.get('save_every', None)
+		self.save_end    = opts.get('save_end', False)
 	
 	# @arg trainloader should be a Dataloader
 	# @arg testloaders should be a Dataloaders
@@ -42,6 +44,8 @@ class GenericSolver:
 					self.scheduler.step(loss)
 				if testloaders and batch_i % self.test_every == 0:
 					self._test(testloaders)
+				if self.save_every and self.iteration % self.save_every == 0:
+					self.save_checkpoint('iter-%d-acc-%f.pth.tar' % (self.iteration, self.acc))
 				self.iteration += 1
 	
 	def _train_step(self, batch_X, batch_Y):
@@ -69,6 +73,14 @@ class GenericSolver:
 		correct_predictions = torch.sum( torch.argmax(self.prediction, 1) == batch_Y.transpose(1,0) ).item()
 		self.acc = correct_predictions / float(batch_X.shape[0])
 		return self.loss_fn( self.prediction, batch_Y.reshape(-1) )
+
+	def save_checkpoint(filename='checkpoint.pth.tar'):
+		torch.save({
+			'epoch': self.epoch,
+			'iteration': self.iteration,
+			'state_dict': self.model.state_dict(),
+			'optimizer': self.optimizer.state_dict(),
+			}, filename)
 
 	def _print(self, loss, dataname='TRAIN'):
 		print('%12s (ep %3d: %5d/%d) loss %e\tacc %.3f' % (dataname, self.epoch, self.iteration, self.num_iterations, loss, self.acc))
