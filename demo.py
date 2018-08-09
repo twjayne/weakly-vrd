@@ -26,9 +26,11 @@ parser.add_option('--cpu', action='store_false', default=True, dest='cuda')
 parser.add_option('--log', dest='logdir', default='log')
 parser.add_option('--geom', dest='geometry', default='1000 2000 2000 70')
 parser.add_option('--nosched', dest='no_scheduler', default=False, action='store_true')
-parser.add_option('--patience', dest='patience', default=None, type="int")
+parser.add_option('--patience', dest='patience', default=10, type="int")
 parser.add_option('--test_every', dest='test_every', default=None)
-parser.add_option('--print_every', dest='test_every', default=None)
+parser.add_option('--print_every', dest='print_every', default=None)
+parser.add_option('--save', dest='save_every', default=None)
+parser.add_option('--end-save', dest='save_at_end', default=False, action='store_true')
 opts, args = parser.parse_args()
 
 logger.Logger(opts.logdir,
@@ -56,7 +58,7 @@ model  = nn.Sequential(*layers).double()
 print('Building optimizer, scheduler, solver...')
 optimizer = torch.optim.Adam(model.parameters(), lr=opts.lr)
 scheduler = None if opts.no_scheduler else torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, verbose=True, patience=opts.patience)
-solver    = Solver(model, optimizer, verbose=True, scheduler=scheduler, lr=opts.lr, num_epochs=opts.num_epochs)
+solver    = Solver(model, optimizer, verbose=True, scheduler=scheduler, **opts.__dict__)
 
 # Initialize train and test sets
 print('Initializing dataset')

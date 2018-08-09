@@ -5,6 +5,7 @@ import pdb
 
 class GenericSolver:
 	def __init__(self, model, optimizer, **opts):
+		opts = {k: v for k, v in opts.items() if v is not None}
 		self.model       = model
 		self.optimizer   = optimizer
 		self.scheduler   = opts.get('scheduler', None)
@@ -42,7 +43,7 @@ class GenericSolver:
 					self._print(loss)
 				if self.scheduler and testloaders is None:
 					self.scheduler.step(loss)
-				if testloaders and batch_i % self.test_every == 0:
+				if testloaders and self.iteration % self.test_every == 0:
 					self._test(testloaders)
 				if self.save_every and self.iteration % self.save_every == 0:
 					self.save_checkpoint('iter-%d-acc-%f.pth.tar' % (self.iteration, self.acc))
@@ -51,10 +52,11 @@ class GenericSolver:
 	def _train_step(self, batch_X, batch_Y):
 		self.model.train()
 		self.optimizer.zero_grad()
-		loss = self.loss_history[self.iteration] = self._calc_loss(batch_X, batch_Y)
+		loss = self._calc_loss(batch_X, batch_Y)
 		loss.backward()
+		self.loss_history[self.iteration] = float(loss.data)
 		self.optimizer.step()
-		return self.loss_history[self.iteration]
+		return loss
 
 	def _test(self, testloaders):
 		self.model.eval()
