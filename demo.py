@@ -8,8 +8,10 @@ from torch.utils.data import DataLoader
 from optparse import OptionParser
 import pdb
 
+import util.loss
 import util.logger as logger
 import dataset.dataset as dset
+import dataset.zeroshot as zeroshot
 
 
 DEFAULT_DATAROOT = os.path.join(os.path.expanduser('~'), 'proj/weakly-vrd/data/vrd-dataset')
@@ -31,6 +33,8 @@ parser.add_option('--test_every', dest='test_every', default=None)
 parser.add_option('--print_every', dest='print_every', default=None)
 parser.add_option('--save', dest='save_every', default=None)
 parser.add_option('--end-save', dest='save_at_end', default=False, action='store_true')
+parser.add_option('--save-best', dest='save_best', default=False, action='store_true')
+parser.add_option('--nosplitzs', dest='split_zeroshot', default=True, action='store_false')
 opts, args = parser.parse_args()
 
 logger.Logger(opts.logdir,
@@ -64,17 +68,28 @@ solver    = Solver(model, optimizer, verbose=True, scheduler=scheduler, **opts._
 print('Initializing dataset')
 dataroot = opts.dataroot
 _trainset = dset.Dataset(dataroot, 'train', pairs='annotated')
-traindata = DataLoader(_trainset, batch_size=opts.batch_size, shuffle=True, num_workers=4)
+trainloader = DataLoader(_trainset, batch_size=opts.batch_size, shuffle=True, num_workers=4)
+
+# Use subset of train data
 if opts.train_size: # if --N: override the __len__ method of the dataset so that only the first N items will be used
 	def train_size(unused): return opts.train_size
 	_trainset.__class__.__len__ = train_size
+
 if opts.do_validation: # Defatult True
 	_testset = dset.Dataset(dataroot, 'test', pairs='annotated')
-	testdata = DataLoader(_testset, batch_size=len(_testset), num_workers=4)
+	if opts.split_zeroshot: # Split testset into seen and zeroshot sets
+		test_sets = zeroshot.Splitter(_trainset, _testset).split()
+		testloaders = [DataLoader(data, batch_size=len(data), num_workers=4) for data in test_sets]
+	else: # Use a single (unified) testset
+		testdata = DataLoader(_testset, batch_size=len(_testset), num_workers=4)
+		testloaders = [testdata]
 else: # if --noval
-	testdata = None
+	testloaders = []
+
+def train():
+	print('Training...')
+	solver.train(trainloader, *testloaders)
 
 # Train and test
 if __name__ == '__main__':
-	print('Training...')
-	solver.train(traindata, testdata)
+	train()
