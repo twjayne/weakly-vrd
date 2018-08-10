@@ -24,12 +24,13 @@ groups = [('name', np.str_, 16),
 
 class Plotter(object):
 	def __init__(self, key, *fpaths):
-		self.fig, self.ax = plt.subplots(num='%s %s' % (self.__class__.__name__, key))
 		self.key = key
 		self.labels = []
 		for fpath in fpaths:
+			plt.figure(fpath)
+			self.ax = plt.subplot()
 			self._line(fpath if type(fpath) is str else fpath[0])
-		self.ax.legend(self.labels)
+			self.ax.legend(self.labels)
 	def _line(self, fpath):
 		dat = np.fromregex(fpath, pattern, groups)
 		srcs = set(dat['name'])
@@ -40,5 +41,5 @@ class Plotter(object):
 
 if __name__ == '__main__':
 	fpaths = glob.glob('log/*.log') if len(sys.argv) < 2 else sys.argv[1:]
-	Plotter('acc', fpaths)
+	Plotter('acc', *fpaths)
 	plt.show()
