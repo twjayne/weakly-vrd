@@ -22,32 +22,39 @@ class GenericSolver:
 	
 	# @arg trainloader should be a Dataloader
 	# @arg testloaders should be a Dataloaders
-	def train(self, trainloader, *testloaders):
+	def train(self, trainloader, testloader, *additional_testloaders):
 		self.num_iterations = self.num_epochs * len(trainloader)
 		self.loss_history = torch.Tensor(self.num_iterations)
 
-		if self.cuda: self.model.cuda()
+		if self.cuda:
+			self.model.cuda()
+			self.loss_fn.cuda()
 
 		self.debug()
 		print('%20s %s' % ('num_epochs', self.num_epochs,))
 		print('%20s %s' % ('num_batches', len(trainloader),))
 		print('%20s %s' % ('batch_size', trainloader.batch_size,))
 
-		best_acc = 0
+		self.best_acc = 0
 		self.iteration = 0
 		for self.epoch in range(self.num_epochs):
 			for batch_i, batch in enumerate(trainloader):
+				# Train
 				tic = time.time()
+				# pdb.set_trace()
 				loss = self._train_step(batch['X'], batch['y'])
 				toc = (time.time() - tic) / len(batch['y'])
 				if self.verbose and batch_i % self.print_every == 0:
-					self._print(loss)
-				if self.scheduler and testloaders is None:
+					self._print(loss, 'TRAIN')
+				if self.scheduler and testloader is None:
 					self.scheduler.step(loss)
-				if testloaders and self.iteration % self.test_every == 0:
-					self._test(testloaders)
-					if self.acc > best_acc and self.iteration > 100:
-						self.save_checkpoint('best.pth.tar')
+				# Test
+				if self.iteration % self.test_every == 0:
+					if testloader: self._test(testloader)
+					# Test extra testsets
+					if additional_testloaders:
+						for additional in additional_testloaders: self._test(additional)
+				# Save model
 				if self.save_every and self.iteration % self.save_every == 0:
 					self.save_checkpoint('iter-%d-acc-%f.pth.tar' % (self.iteration, self.acc))
 				self.iteration += 1
@@ -61,14 +68,19 @@ class GenericSolver:
 		self.optimizer.step()
 		return loss
 
-	def _test(self, testloaders):
+	def _test_primary(self, testloader):
+		loss = self._test(testloader)
+		if self.scheduler: self.scheduler.step(loss)
+		if self.opts.get('save_best', False) and self.acc > self.best_acc and self.iteration > 100:
+			self.save_checkpoint('best.pth.tar')
+			self.best_acc = self.acc
+
+	def _test(self, testloader):
 		self.model.eval()
-		for i,testloader in enumerate(testloaders):
-			for testbatch in testloader:
-				loss = self._calc_loss(testbatch['X'], testbatch['y'])
-				if i == 0 and self.scheduler:
-					self.scheduler.step(loss)
-				self._print(loss, testloader.dataset.name or 'TEST')
+		for testbatch in testloader:
+			loss = self._calc_loss(testbatch['X'], testbatch['y'])
+			self._print(loss, testloader.dataset.name or 'TEST')
+		return loss
 
 	def _calc_loss(self, batch_X, batch_Y):
 		if self.cuda:
@@ -80,6 +92,7 @@ class GenericSolver:
 		return self.loss_fn( self.prediction, batch_Y.reshape(-1) )
 
 	def save_checkpoint(self, filename='checkpoint.pth.tar'):
+		print(' --- saving checkpoint --- ')
 		torch.save({
 			'epoch': self.epoch,
 			'iteration': self.iteration,
