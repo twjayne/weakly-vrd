@@ -33,6 +33,7 @@ class GenericSolver:
 		print('%20s %s' % ('num_batches', len(trainloader),))
 		print('%20s %s' % ('batch_size', trainloader.batch_size,))
 
+		best_acc = 0
 		self.iteration = 0
 		for self.epoch in range(self.num_epochs):
 			for batch_i, batch in enumerate(trainloader):
@@ -45,6 +46,8 @@ class GenericSolver:
 					self.scheduler.step(loss)
 				if testloaders and self.iteration % self.test_every == 0:
 					self._test(testloaders)
+					if self.acc > best_acc and self.iteration > 100:
+						self.save_checkpoint('best.pth.tar')
 				if self.save_every and self.iteration % self.save_every == 0:
 					self.save_checkpoint('iter-%d-acc-%f.pth.tar' % (self.iteration, self.acc))
 				self.iteration += 1
@@ -76,7 +79,7 @@ class GenericSolver:
 		self.acc = correct_predictions / float(batch_X.shape[0])
 		return self.loss_fn( self.prediction, batch_Y.reshape(-1) )
 
-	def save_checkpoint(filename='checkpoint.pth.tar'):
+	def save_checkpoint(self, filename='checkpoint.pth.tar'):
 		torch.save({
 			'epoch': self.epoch,
 			'iteration': self.iteration,
