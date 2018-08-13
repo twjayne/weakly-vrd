@@ -1,13 +1,15 @@
 import torch
 import torch.nn as nn
 import time
+import os
 import pdb
 
 class GenericSolver:
 	def __init__(self, model, optimizer, **opts):
-		opts = {k: v for k, v in opts.items() if v is not None}
+		opts = self.opts = {k: v for k, v in opts.items() if v is not None}
 		self.model       = model
 		self.optimizer   = optimizer
+		self.outdir      = opts.get('outdir', None)
 		self.scheduler   = opts.get('scheduler', None)
 		self.cuda        = opts.get('cuda', True)
 		self.supervision = opts.get('supervision', WEAK)
@@ -50,7 +52,7 @@ class GenericSolver:
 					self.scheduler.step(loss)
 				# Test
 				if self.iteration % self.test_every == 0:
-					if testloader: self._test(testloader)
+					if testloader: self._test_primary(testloader)
 					# Test extra testsets
 					if additional_testloaders:
 						for additional in additional_testloaders: self._test(additional)
@@ -71,8 +73,8 @@ class GenericSolver:
 	def _test_primary(self, testloader):
 		loss = self._test(testloader)
 		if self.scheduler: self.scheduler.step(loss)
-		if self.opts.get('save_best', False) and self.acc > self.best_acc and self.iteration > 100:
-			self.save_checkpoint('best.pth.tar')
+		if self.opts.get('save_best', False) and self.acc > self.best_acc:
+			self.save_checkpoint('best.pth')
 			self.best_acc = self.acc
 
 	def _test(self, testloader):
@@ -91,14 +93,14 @@ class GenericSolver:
 		self.acc = correct_predictions / float(batch_X.shape[0])
 		return self.loss_fn( self.prediction, batch_Y.reshape(-1) )
 
-	def save_checkpoint(self, filename='checkpoint.pth.tar'):
+	def save_checkpoint(self, filename='checkpoint.pth'):
 		print(' --- saving checkpoint --- ')
 		torch.save({
 			'epoch': self.epoch,
 			'iteration': self.iteration,
 			'state_dict': self.model.state_dict(),
 			'optimizer': self.optimizer.state_dict(),
-			}, filename)
+			}, os.path.join(self.outdir or '', filename))
 
 	def _print(self, loss, dataname='TRAIN'):
 		print('%12s (ep %3d: %5d/%d) loss %e\tacc %.3f' % (dataname, self.epoch, self.iteration, self.num_iterations, loss, self.acc))

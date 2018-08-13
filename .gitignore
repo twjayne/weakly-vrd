@@ -3,3 +3,5 @@ data
 log
 *.out
 *.npy
+log.*
+*.log
