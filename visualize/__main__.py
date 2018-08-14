@@ -29,13 +29,16 @@ class Plotter(object):
 		for fpath in fpaths:
 			plt.figure(fpath)
 			self.ax = plt.subplot()
+			plt.title(fpath)
 			self._line(fpath if type(fpath) is str else fpath[0])
 			self.ax.legend(self.labels)
 	def _line(self, fpath):
 		dat = np.fromregex(fpath, pattern, groups)
 		srcs = set(dat['name'])
+		subs = {src: dat[dat['name'] == src] for src in srcs}
+		srcs = sorted(subs, key=lambda x: len(subs[x]), reverse=True)
 		for src in srcs:
-			sub = dat[dat['name'] == src]
+			sub = subs[src]
 			self.ax.plot(sub['batch'], sub[self.key])
 			self.labels.append(src)
 
