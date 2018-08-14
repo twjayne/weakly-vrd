@@ -8,7 +8,7 @@ import dataset.dataset as dset
 from optparse import OptionParser
 import numpy as np 
 import os
-from dataset.example import BasicExampleWithoutY
+from dataset.example import BasicTestingExample
 
 DEFAULT_DATAROOT = '/home/SSD2/tyler-data/unrel/data/vrd-dataset' # for vision2
 
@@ -60,7 +60,7 @@ def load_pretrained_model(model_path):
     return pre_trained_model['state_dict']
 
 def load_test_data(pairs):
-    _testset = dset.Dataset(DEFAULT_DATAROOT, 'test', pairs=pairs, klass=BasicExampleWithoutY)
+    _testset = dset.Dataset(DEFAULT_DATAROOT, 'test', pairs=pairs, klass=BasicTestingExample)
     testdata = DataLoader(_testset, batch_size=len(_testset),num_workers=4)
     # testloaders = [testdata]
 

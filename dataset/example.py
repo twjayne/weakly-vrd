@@ -32,7 +32,7 @@ class BasicExample(Example):
 		self._set('X', self.visual_features())
 		self._set('y', self.rel_cat.astype(np.long))
 
-class BasicExampleWithoutY(Example):
+class BasicTestingExample(Example):
 	def __init__(self, *args):
-		super(BasicExampleWithoutY, self).__init__(*args)
+		super(BasicTestingExample, self).__init__(*args)
 		self._set('X', self.visual_features())
