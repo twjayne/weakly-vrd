@@ -30,34 +30,38 @@ class RecallEvaluator(object):
         self.DEFAULT_DATAROOT = dataroot
         self.UNREL_PATH = unrel_path
         self.SCORES_PATH = scores_path
-        # parser
-        parser = OptionParser()
-        # options
-        parser.add_option('--Nre', dest='Nre', default=50, type="int")
-        parser.add_option('--supervision', dest='supervision', default='full')
-        parser.add_option('--num_negatives', dest='num_negatives', type='int',
-                            default=0)
-        parser.add_option('--use_lang_scores', dest='use_languagescores', 
-                            action='store_true', default=False)
-        parser.add_option('--zeroshot', dest='zeroshot', action='store_true', 
-                            default=False)
-        parser.add_option('--dataset', dest='dataset', default='vrd-dataset')
-        parser.add_option('--candidatepairs', dest='candidatepairs', 
-                            default='annotated')
-        parser.add_option('--use_object_scores', dest='use_objectsocres',
-                            action='store_true', default=False)
-        parser.add_option('--annotatedpairs', dest='annotatedpairs',
-                            default='annotated')
-        parser.add_option('--bias', dest='bias', default=100, type='int')
-        parser.add_option('--features', dest='featurestype',
-                            default=['spatial', 'appearance'])
-        parser.add_option('--dataroot', dest='dataroot', 
-                            default=self.DEFAULT_DATAROOT)
+        
+    def predict(self):
+        # load model, testdata, and save scores in self.prediction
+        # load testdata and calculate self.prediction
+        model = self.model
+        testloader = self.load_test_data()
+        for testbatch in testloader:
+            self.prediction = model(testbatch['X'])
+        # load annotations
+        annotations = self.load_full_annotations()
+        # load candidatepairs
+        pairs = self.load_pairs()
 
-        # show opts
-        self.opts, self.args = parser.parse_args()
-        opts = self.opts
-        # print(opts)
+        return (pairs, self.prediction, annotations)
+
+    def load_test_data(self):
+        # load testdata into a testloader
+        testset = dset.Dataset(os.path.join(self.DEFAULT_DATAROOT, self.dataset),
+                                self.split, self.opts.candidatepairs, 
+                                klass=BasicTestingExample)
+        testdata = DataLoader(testset, batch_size=len(_testset), num_workers=4)
+        return testdata
+
+    def load_annotated(self):
+        # loads pairs.mat from vrd-dataset/test/annotated
+        testset = dset.Dataset(os.path.join(self.DEFAULT_DATAROOT, self.dataset), self.split, self.opts.candidatepairs, klass=BasicTestingExample)
+        testdata = DataLoader(testset, batch_size=len(_testset), num_workers=4)
+        return None
+
+    def load_candidates(self):
+
+        return None
 
     def define_model(self, dimensions):
         # copied from demo.py for defining a model
@@ -197,39 +201,5 @@ class RecallEvaluator(object):
 
         return recalls
 
-
-    def predict(self):
-        # load model, testdata, and save scores in self.prediction
-        # load testdata and calculate self.prediction
-        model = self.model
-        testloader = self.load_test_data()
-        for testbatch in testloader:
-            self.prediction = model(testbatch['X'])
-        # load annotations
-        annotations = self.load_full_annotations()
-        # load candidatepairs
-        pairs = self.load_pairs()
-
-        return (pairs, self.prediction, annotations)
-
-    def load_test_data(self):
-        # load testdata into a testloader
-        testset = dset.Dataset(os.path.join(self.DEFAULT_DATAROOT, self.dataset),
-                                self.split, self.opts.candidatepairs, 
-                                klass=BasicTestingExample)
-        testdata = DataLoader(testset, batch_size=len(_testset), num_workers=4)
-        return testdata
-
-    def load_full_annotations(self):
-
-        return None
-
-    def load_pairs(self):
-
-        return None
-
 if __name__ == '__main__':
-    evalr = RecallEvaluator()
-    recalls = evalr.recall_from_matlab(None)
-    # evalr.test_subprocess(UNREL_PATH, SCORES_PATH, '1000 2000 2000 70', 'exp2-3')
-    # print(evalr)
+    evalr = RecallEvaluator('/home/SSD2/tyler-data/unrel/data',"/home/tylerjan/code/vrd/unrel","/home/tylerjan/code/vrd/unrel/scores")
