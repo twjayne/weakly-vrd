@@ -98,8 +98,8 @@ class GenericSolver:
 		self.acc = correct_predictions / float(batch_Y.shape[0])
 		return self.loss_fn( self.prediction, batch_Y.reshape(-1) )
 
-	def _calc_recall(self, model):
-		recalls = self.evaluator.recall_from_matlab(model)
+	def _calc_recall(self):
+		recalls = self.evaluator.recall_from_matlab(self.model)
 		print(f"recalls: {recalls}")
 		return recalls
 
