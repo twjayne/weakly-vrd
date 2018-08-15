@@ -4,7 +4,7 @@ import time
 import os
 import pdb
 
-import RecallEvaluator
+from RecallEvaluator import RecallEvaluator
 
 class GenericSolver:
 	def __init__(self, model, optimizer, **opts):
@@ -23,6 +23,7 @@ class GenericSolver:
 		self.dtype       = opts.get('dtype', torch.double)
 		self.save_every  = opts.get('save_every', None)
 		self.save_end    = opts.get('save_end', False)
+		self.recalls     = {}
 	
 	# @arg trainloader should be a Dataloader
 	# @arg testloaders should be a Dataloaders
@@ -30,7 +31,7 @@ class GenericSolver:
 		self.num_iterations = self.num_epochs * len(trainloader)
 		self.loss_history = torch.Tensor(self.num_iterations)
 		# initialize evaluator
-		self.evaluator = RecallEvaluator()
+		self.evaluator = RecallEvaluator('/home/SSD2/tyler-data/unrel/data',"/home/tylerjan/code/vrd/unrel","/home/tylerjan/code/vrd/unrel/scores")
 
 		if self.cuda:
 			self.model.cuda()
@@ -84,6 +85,7 @@ class GenericSolver:
 		self.model.eval()
 		for testbatch in testloader:
 			loss = self._calc_loss(testbatch['X'], testbatch['y'])
+			# self.recalls = self._calc_recall(self.model)
 			self._print(loss, testloader.dataset.name or 'TEST')
 		return loss
 
@@ -98,7 +100,7 @@ class GenericSolver:
 
 	def _calc_recall(self, model):
 		recalls = self.evaluator.recall_from_matlab(model)
-
+		print(f"recalls: {recalls}")
 		return recalls
 
 	def save_checkpoint(self, filename='checkpoint.pth'):

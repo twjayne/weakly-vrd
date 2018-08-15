@@ -10,15 +10,15 @@ import scipy.io
 from subprocess import Popen, PIPE, STDOUT
 
 # path to folder containing vrd-dataset and others
-DEFAULT_DATAROOT = '/home/SSD2/tyler-data/unrel/data'
+# DEFAULT_DATAROOT = '/home/SSD2/tyler-data/unrel/data'
 # vision5
 # DEFAULT_DATAROOT = "/data/tyler/unrel/data/vrd-dataset"
-UNREL_PATH = "/home/tylerjan/code/vrd/unrel"
-SCORES_PATH = "/home/tylerjan/code/vrd/unrel/scores"
+# UNREL_PATH = "/home/tylerjan/code/vrd/unrel"
+# SCORES_PATH = "/home/tylerjan/code/vrd/unrel/scores"
 
 
 class RecallEvaluator(object):
-    def __init__(self):
+    def __init__(self, dataroot, unrel_path, scores_path):
         # model: current model weights
         # dimensions: dimensions of each layer in a list, originally empty
         # prediction: output scores of a forward pass of testset
@@ -27,6 +27,9 @@ class RecallEvaluator(object):
         self.prediction = {}
         self.split = 'test'
         self.pairs = None
+        self.DEFAULT_DATAROOT = dataroot
+        self.UNREL_PATH = unrel_path
+        self.SCORES_PATH = scores_path
         # parser
         parser = OptionParser()
         # options
@@ -49,7 +52,7 @@ class RecallEvaluator(object):
         parser.add_option('--features', dest='featurestype',
                             default=['spatial', 'appearance'])
         parser.add_option('--dataroot', dest='dataroot', 
-                            default=DEFAULT_DATAROOT)
+                            default=self.DEFAULT_DATAROOT)
 
         # show opts
         self.opts, self.args = parser.parse_args()
@@ -59,7 +62,7 @@ class RecallEvaluator(object):
     def define_model(self, dimensions):
         # copied from demo.py for defining a model
         parser2 = OptionParser()
-        parser2.add_option('--data', dest='dataroot', default=DEFAULT_DATAROOT)
+        parser2.add_option('--data', dest='dataroot', default=self.DEFAULT_DATAROOT)
         parser2.add_option('--lr', dest='lr', default=0.001, type="float")
         parser2.add_option('--bs', dest='batch_size', default=32, type="int")
         parser2.add_option('--ep', dest='num_epochs', default=30, type="int")
@@ -144,9 +147,10 @@ class RecallEvaluator(object):
         # save the predictions
         _testset = {}
         testdata = {}
+        print('saving .mat files...')
         for setting in settings:
             # initialize dataloaders for both testset
-            _testset[setting] = dset.Dataset(os.path.join(DEFAULT_DATAROOT,
+            _testset[setting] = dset.Dataset(os.path.join(self.DEFAULT_DATAROOT,
                                     'vrd-dataset'), 'test', pairs=setting, 
                                     klass=BasicTestingExample)
             testdata[setting] = DataLoader(_testset[setting], 
@@ -154,19 +158,21 @@ class RecallEvaluator(object):
                                 num_workers=4)
             # run prediction for each and save in .mat
             for testbatch in testdata[setting]:
-                self.prediction[setting] = self.model(testbatch['X'])
+                self.prediction[setting] = self.model(testbatch['X'].cuda())
                 scores_cpu = self.prediction[setting].cpu()
                 scores_np = scores_cpu.data.numpy()
                 mydict = {'scores':scores_np}
                 # sanity check
                 # print(mydict['scores'])
-                print(f"from dataset: {setting}\nshape: {mydict['scores'].shape}")
+                # print(f"from dataset: {setting}\nshape: {mydict['scores'].shape}")
                 # save to unrel folder as (ex) "/annotated_<dim>_<id>.mat"
-                scipy.io.savemat(os.path.join(SCORES_PATH, f'{setting}.mat'), mydict)
-                print(f"{setting}.mat file is saved")
+                scipy.io.savemat(os.path.join(self.SCORES_PATH, f'{setting}.mat'), mydict)
+                # print(f"{setting}.mat file is saved")
         # use subprocess to run
-        print('start')
-        rc = Popen(f"{UNREL_PATH}/run_recall.sh baseline full {SCORES_PATH}", shell=True, stdin=PIPE, stdout=PIPE, stderr=STDOUT, close_fds=True)
+        print('starting matlab...')
+        # rc = Popen(f"{self.UNREL_PATH}/run_recall.sh baseline full {self.SCORES_PATH}", shell=True)
+        # return {}
+        rc = Popen(f"{self.UNREL_PATH}/run_recall.sh baseline full {self.SCORES_PATH}", shell=True, stdin=PIPE, stdout=PIPE, stderr=STDOUT, close_fds=True)
         rc_out = str(rc.stdout.read(), 'utf-8')
 
         results = []
@@ -187,9 +193,10 @@ class RecallEvaluator(object):
         recalls['unseen_predicate'] = results[3]
         recalls['unseen_phrase'] = results[4]
         recalls['unseen_relationship'] = results[5]
-        print(f"recalls: {recalls}")
+        # print(f"recalls: {recalls}")
 
         return recalls
+
 
     def predict(self):
         # load model, testdata, and save scores in self.prediction
@@ -207,7 +214,7 @@ class RecallEvaluator(object):
 
     def load_test_data(self):
         # load testdata into a testloader
-        testset = dset.Dataset(os.path.join(DEFAULT_DATAROOT, self.dataset),
+        testset = dset.Dataset(os.path.join(self.DEFAULT_DATAROOT, self.dataset),
                                 self.split, self.opts.candidatepairs, 
                                 klass=BasicTestingExample)
         testdata = DataLoader(testset, batch_size=len(_testset), num_workers=4)
