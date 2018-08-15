@@ -4,6 +4,8 @@ import time
 import os
 import pdb
 
+import RecallEvaluator
+
 class GenericSolver:
 	def __init__(self, model, optimizer, **opts):
 		opts = self.opts = {k: v for k, v in opts.items() if v is not None}
@@ -27,6 +29,8 @@ class GenericSolver:
 	def train(self, trainloader, testloader, *additional_testloaders):
 		self.num_iterations = self.num_epochs * len(trainloader)
 		self.loss_history = torch.Tensor(self.num_iterations)
+		# initialize evaluator
+		self.evaluator = RecallEvaluator()
 
 		if self.cuda:
 			self.model.cuda()
@@ -91,6 +95,11 @@ class GenericSolver:
 		correct_predictions = torch.sum( torch.argmax(self.prediction, 1) == batch_Y.transpose(1,0) ).item()
 		self.acc = correct_predictions / float(batch_Y.shape[0])
 		return self.loss_fn( self.prediction, batch_Y.reshape(-1) )
+
+	def _calc_recall(self, model):
+		recalls = self.evaluator.recall_from_matlab(model)
+
+		return recalls
 
 	def save_checkpoint(self, filename='checkpoint.pth'):
 		print(' --- saving checkpoint --- ')
