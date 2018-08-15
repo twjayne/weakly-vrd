@@ -43,7 +43,6 @@ class GenericSolver:
 			for batch_i, batch in enumerate(trainloader):
 				# Train
 				tic = time.time()
-				# pdb.set_trace()
 				loss = self._train_step(batch['X'], batch['y'])
 				toc = (time.time() - tic) / len(batch['y'])
 				if self.verbose and batch_i % self.print_every == 0:
@@ -86,11 +85,11 @@ class GenericSolver:
 
 	def _calc_loss(self, batch_X, batch_Y):
 		if self.cuda:
-			batch_X = batch_X.cuda()
-			batch_Y = batch_Y.cuda()
+			if type(batch_X) is torch.Tensor: batch_X = batch_X.cuda()
+			if type(batch_Y) is torch.Tensor: batch_Y = batch_Y.cuda()
 		self.prediction = self.model(batch_X)
 		correct_predictions = torch.sum( torch.argmax(self.prediction, 1) == batch_Y.transpose(1,0) ).item()
-		self.acc = correct_predictions / float(batch_X.shape[0])
+		self.acc = correct_predictions / float(batch_Y.shape[0])
 		return self.loss_fn( self.prediction, batch_Y.reshape(-1) )
 
 	def save_checkpoint(self, filename='checkpoint.pth'):
