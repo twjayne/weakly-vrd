@@ -1,3 +1,4 @@
+import torch
 import torch.nn as nn
 import numpy as np
 import pdb
@@ -36,16 +37,20 @@ class BlockGenerator(object):
 
 
 class Funnel(nn.Module):
-	def __init__(self, geom_basic, geom_scenic, geom_shared):
+	def __init__(self, geom_basic, geom_scenic, geom_shared, **opts):
 		super(Funnel, self).__init__()
+		self.use_cuda = opts.get('cuda', True)
 		gen = BlockGenerator([nn.Dropout, BATCHNORM_LAYER, nn.ReLU])
 		self.basic = nn.Sequential(*[l for l in gen.generate(geom_basic, True)])
 		self.scenic = nn.Sequential(*[l for l in gen.generate(geom_scenic, True)])
 		self.shared = nn.Sequential(*[l for l in gen.generate(geom_shared)])
-	def forward(self, **x):
+	def forward(self, x):
+		if self.use_cuda:
+			x['basic'] = x['basic'].cuda()
+			x['scenic'] = x['scenic'].cuda()
 		a = self.basic(x['basic'])
 		b = self.scenic(x['scenic'])
-		x = torch.cat((a, b), dim=2)
+		x = torch.cat((a, b), dim=1)
 		return self.shared(x)
 
 if __name__ == '__main__':

@@ -2,11 +2,11 @@ import sys, os
 sys.path.insert(0, os.path.realpath(os.path.join(__file__,'../..')))
 import numpy as np
 import torch
+import torch.utils.data as dat
 assert torch.__version__.startswith('0.4'), 'wanted version 0.4, got %s' % torch.__version__
 import os, datetime as dt
 import torch.nn as nn
 from classifier.generic_solver import GenericSolver as Solver
-from torch.utils.data import DataLoader
 from optparse import OptionParser
 import pdb
 
@@ -17,6 +17,7 @@ import dataset.zeroshot as zeroshot
 
 DEFAULT_DATAROOT = os.path.join(os.path.dirname(__file__), '..', 'data/vrd-dataset')
 DEFAULT_LOGDIR   = os.path.join(os.path.dirname(__file__), '..', 'log')
+NUM_WORKERS = 4
 
 class Runner(object):
 
@@ -33,6 +34,7 @@ class Runner(object):
         parser.add_option('--bs', dest='batch_size', default=32, type="int")
         parser.add_option('--ep', dest='num_epochs', default=30, type="int")
         parser.add_option('-N', dest='train_size', default=None, type="int")
+        parser.add_option('--val', dest='val', default=None, type="float", help="percentage of the primary test set to use (used as validation; remainder is unused)")
         parser.add_option('--noval', action='store_false', default=True, dest='do_validation')
         parser.add_option('--cpu', action='store_false', default=True, dest='cuda')
         parser.add_option('--logdir', dest='logdir', default='log')
@@ -40,9 +42,9 @@ class Runner(object):
         parser.add_option('--geom', dest='geometry', default='1000 2000 2000 70')
         parser.add_option('--nosched', dest='no_scheduler', default=False, action='store_true')
         parser.add_option('--patience', dest='patience', default=10, type="int")
-        parser.add_option('--test_every', dest='test_every', default=None)
-        parser.add_option('--print_every', dest='print_every', default=None)
-        parser.add_option('--save', dest='save_every', default=None)
+        parser.add_option('--test_every', dest='test_every', default=None, type='int')
+        parser.add_option('--print_every', dest='print_every', default=None, type='int')
+        parser.add_option('--save', dest='save_every', default=None, type='int')
         parser.add_option('--end-save', dest='save_at_end', default=False, action='store_true')
         parser.add_option('--save-best', dest='save_best', default=False, action='store_true')
         parser.add_option('--outdir', dest='outdir', default=None, help="Used for saving checkpoints, etc.")
@@ -59,7 +61,12 @@ class Runner(object):
 
     def setup(self):
         print('Init...')
+        self.setup_model()
+        self.setup_opt()
+        print('Initializing dataset(s)...')
+        self.setup_data()
 
+    def setup_model(self):
         # Define model
         if self.model == None:
             print('Building model')
@@ -75,6 +82,7 @@ class Runner(object):
             layers = list(model_generator(layer_widths, self.opts.train_size == 1))
             self.model  = nn.Sequential(*layers).double()
 
+    def setup_opt(self):
         # Define optimizer, scheduler, solver
         if self.optimizer == None:
             print('Building optimizer...')
@@ -86,11 +94,11 @@ class Runner(object):
             print('Building solver...')
             self.solver = Solver(self.model, self.optimizer, verbose=True, scheduler=self.scheduler, **self.opts.__dict__)
 
+    def setup_data(self):
         # Initialize trainset
-        print('Initializing dataset')
         dataroot = self.opts.dataroot
         _trainset = dset.Dataset(dataroot, 'train', pairs='annotated')
-        self.trainloader = DataLoader(_trainset, batch_size=self.opts.batch_size, shuffle=True, num_workers=4)
+        self.trainloader = dat.DataLoader(_trainset, batch_size=self.opts.batch_size, shuffle=True, num_workers=4)
 
         # Use subset of train data
         if self.opts.train_size: # if --N: override the __len__ method of the dataset so that only the first N items will be used
@@ -102,10 +110,15 @@ class Runner(object):
             _testset = dset.Dataset(dataroot, 'test', pairs='annotated')
             if self.opts.split_zeroshot: # Split testset into seen and zeroshot sets
                 test_sets = zeroshot.Splitter(_trainset, _testset).split()
-                self.testloaders = [DataLoader(data, batch_size=len(data), num_workers=4) for data in test_sets]
+                self.testloaders = [dat.DataLoader(data, batch_size=len(data), num_workers=NUM_WORKERS) for data in test_sets]
             else: # Use a single (unified) testset
-                testdata = DataLoader(_testset, batch_size=len(_testset), num_workers=4)
+                testdata = dat.DataLoader(_testset, batch_size=len(_testset), num_workers=NUM_WORKERS)
                 self.testloaders = [testdata]
+            if self.opts.val: # Use only x percent of the primary testset as validation (and don't use the rest at this time)
+                dataset = self.testloaders[0].dataset
+                n = int(len(dataset) * self.opts.val)
+                sampler = dat.SubsetRandomSampler(torch.arange(n))
+                self.testloaders[0] = dat.DataLoader(dataset, batch_size=n, sampler=sampler, num_workers=NUM_WORKERS)
         else: # if --noval
             self.testloaders = []
 
