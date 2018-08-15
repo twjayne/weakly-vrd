@@ -151,17 +151,16 @@ class RecallEvaluator(object):
         # save the predictions
         _testset = {}
         testdata = {}
-        print('saving .mat files...')
         for setting in settings:
+            print('loading datasets...')
             # initialize dataloaders for both testset
-            _testset[setting] = dset.Dataset(os.path.join(self.DEFAULT_DATAROOT,
-                                    'vrd-dataset'), 'test', pairs=setting, 
-                                    klass=BasicTestingExample)
+            _testset[setting] = dset.Dataset(os.path.join(self.DEFAULT_DATAROOT,'vrd-dataset'), 'test', pairs=setting,klass=BasicTestingExample)
             testdata[setting] = DataLoader(_testset[setting], 
                                 batch_size=len(_testset[setting]), 
                                 num_workers=4)
             # run prediction for each and save in .mat
             for testbatch in testdata[setting]:
+                print('calculating scores...')
                 self.prediction[setting] = self.model(testbatch['X'].cuda())
                 scores_cpu = self.prediction[setting].cpu()
                 scores_np = scores_cpu.data.numpy()
@@ -170,8 +169,11 @@ class RecallEvaluator(object):
                 # print(mydict['scores'])
                 # print(f"from dataset: {setting}\nshape: {mydict['scores'].shape}")
                 # save to unrel folder as (ex) "/annotated_<dim>_<id>.mat"
+                print('saving .mat files')
                 scipy.io.savemat(os.path.join(self.SCORES_PATH, f'{setting}.mat'), mydict)
                 # print(f"{setting}.mat file is saved")
+                self.prediction = {}
+                
         # use subprocess to run
         print('starting matlab...')
         # rc = Popen(f"{self.UNREL_PATH}/run_recall.sh baseline full {self.SCORES_PATH}", shell=True)
