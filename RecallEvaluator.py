@@ -23,7 +23,7 @@ class RecallEvaluator(object):
         # dimensions: dimensions of each layer in a list, originally empty
         # prediction: output scores of a forward pass of testset
         self.model = None
-        self.dimensions = '1000 2000 2000 70'
+        # self.dimensions = '1000 2000 2000 70'
         self.prediction = {}
         self.split = 'test'
         self.pairs = None
@@ -98,10 +98,10 @@ class RecallEvaluator(object):
         # should be called by runner whenever testing needs to be done
         
         # for testing
-        pre_trained_model = torch.load("/home/SSD2/markham-data/weakly-vrd/out/geom 1000 2000 2000 70/exp2-3/best.pth")['state_dict']
-        model = self.define_model(self.dimensions)
-        model.load_state_dict(pre_trained_model)
-        model.eval()
+        # pre_trained_model = torch.load("/home/SSD2/markham-data/weakly-vrd/out/geom 1000 2000 2000 70/exp2-3/best.pth")['state_dict']
+        # model = self.define_model('1000 2000 2000 70')
+        # model.load_state_dict(pre_trained_model)
+        # model.eval()
 
         self.model = model
 
@@ -131,14 +131,13 @@ class RecallEvaluator(object):
         recalls['unseen_relationship'] = results[5]
         print(f"recalls: {recalls}")
 
-    def recall_from_matlab(self, exp_id):
+    def recall_from_matlab(self, model):
         # save to .mat, call infer_from_scores.m to evaluate recall
         # assume model is given by runner, use it to run predictions from both annotated and Lu-candidates testset
         # also requires experiment name
         # return a dictionary of recalls{'seen/unseen_predicate/phrase/relationship'}
-        unrel = UNREL_PATH
         # update model and put in eval() mode
-        self.update_model(self.model)
+        self.update_model(model)
         self.model.eval()
         # settings, should always be in this order for testing
         settings = ['annotated', 'Lu-candidates']
@@ -163,11 +162,11 @@ class RecallEvaluator(object):
                 # print(mydict['scores'])
                 print(f"from dataset: {setting}\nshape: {mydict['scores'].shape}")
                 # save to unrel folder as (ex) "/annotated_<dim>_<id>.mat"
-                scipy.io.savemat(os.path.join(unrel, 'scores', f'{setting}_{self.dimensions}_{exp_id}.mat'), mydict)
+                scipy.io.savemat(os.path.join(SCORES_PATH, f'{setting}.mat'), mydict)
                 print(f"{setting}.mat file is saved")
         # use subprocess to run
         print('start')
-        rc = Popen(f"{unrel}/run_recall.sh baseline full {SCORES_PATH} '{self.dimensions}' '{exp_id}'", shell=True, stdin=PIPE, stdout=PIPE, stderr=STDOUT, close_fds=True)
+        rc = Popen(f"{UNREL_PATH}/run_recall.sh baseline full {SCORES_PATH}", shell=True, stdin=PIPE, stdout=PIPE, stderr=STDOUT, close_fds=True)
         rc_out = str(rc.stdout.read(), 'utf-8')
 
         results = []
@@ -224,6 +223,6 @@ class RecallEvaluator(object):
 
 if __name__ == '__main__':
     evalr = RecallEvaluator()
-    recalls = evalr.recall_from_matlab('exp2-3')
+    recalls = evalr.recall_from_matlab(None)
     # evalr.test_subprocess(UNREL_PATH, SCORES_PATH, '1000 2000 2000 70', 'exp2-3')
     # print(evalr)
