@@ -26,7 +26,7 @@ class RecallEvaluator(object):
         # self.dimensions = '1000 2000 2000 70'
         self.prediction = {}
         self.split = 'test'
-        self.pairs = None
+        self.pairs = ['annotated', 'Lu-candidates']
         self.DEFAULT_DATAROOT = dataroot
         self.UNREL_PATH = unrel_path
         self.SCORES_PATH = scores_path
@@ -45,98 +45,24 @@ class RecallEvaluator(object):
 
         return (pairs, self.prediction, annotations)
 
-    def load_test_data(self):
-        # load testdata into a testloader
-        testset = dset.Dataset(os.path.join(self.DEFAULT_DATAROOT, self.dataset),
-                                self.split, self.opts.candidatepairs, 
-                                klass=BasicTestingExample)
-        testdata = DataLoader(testset, batch_size=len(_testset), num_workers=4)
-        return testdata
+    def calc_scores(self, testloader):
+
+        return None
 
     def load_annotated(self):
         # loads pairs.mat from vrd-dataset/test/annotated
-        testset = dset.Dataset(os.path.join(self.DEFAULT_DATAROOT, self.dataset), self.split, self.opts.candidatepairs, klass=BasicTestingExample)
-        testdata = DataLoader(testset, batch_size=len(_testset), num_workers=4)
-        return None
+        testset = dset.Dataset(os.path.join(self.DEFAULT_DATAROOT, self.dataset), self.split, self.pairs[0], klass=BasicTestingExample)
+        annotated = DataLoader(testset, batch_size=len(_testset), num_workers=4)
+        return annotated
 
     def load_candidates(self):
-
-        return None
-
-    def define_model(self, dimensions):
-        # copied from demo.py for defining a model
-        parser2 = OptionParser()
-        parser2.add_option('--data', dest='dataroot', default=self.DEFAULT_DATAROOT)
-        parser2.add_option('--lr', dest='lr', default=0.001, type="float")
-        parser2.add_option('--bs', dest='batch_size', default=32, type="int")
-        parser2.add_option('--ep', dest='num_epochs', default=30, type="int")
-        parser2.add_option('-N', dest='train_size', default=None, type="int")
-        parser2.add_option('--noval', action='store_false', default=True, dest='do_validation')
-        parser2.add_option('--cpu', action='store_false', default=True, dest='cuda')
-        parser2.add_option('--log', dest='logdir', default='log')
-        parser2.add_option('--geom', dest='geometry', default=dimensions)
-        parser2.add_option('--nosched', dest='no_scheduler', default=False, action='store_true')
-        parser2.add_option('--patience', dest='patience', default=10, type="int")
-        parser2.add_option('--test_every', dest='test_every', default=None)
-        parser2.add_option('--print_every', dest='print_every', default=None)
-        parser2.add_option('--save', dest='save_every', default=None)
-        parser2.add_option('--end-save', dest='save_at_end', default=False, action='store_true')
-        opts, args = parser2.parse_args()
-
-        # print('starting ...')
-        # print(opts)
-
-        # print('Building model')
-        layer_widths = [int(x) for x in opts.geometry.split(' ')]
-        # print('Geometry: %s' % (' '.join((str(x) for x in layer_widths))))
-        def model_generator(layer_widths, is_batch_gt_1):
-            for i in range(1, len(layer_widths)):
-                yield nn.Linear(layer_widths[i-1], layer_widths[i])
-                if i < len(layer_widths) - 1: # All except the last
-                    yield nn.Dropout()
-                    yield nn.BatchNorm1d(layer_widths[i])
-                    yield nn.ReLU()
-        layers = list(model_generator(layer_widths, opts.train_size == 1))
-        model  = nn.Sequential(*layers).double()
-
-        return model
+        testset = dset.Dataset(os.path.join(self.DEFAULT_DATAROOT, self.dataset), self.split, self.pairs[1], klass=BasicTestingExample)
+        candidates = DataLoader(testset, batch_size=len(_testset), num_workers=4)
+        return candidates
 
     def update_model(self, model):
         # should be called by runner whenever testing needs to be done
-        
-        # for testing
-        # pre_trained_model = torch.load("/home/SSD2/markham-data/weakly-vrd/out/geom 1000 2000 2000 70/exp2-3/best.pth")['state_dict']
-        # model = self.define_model('1000 2000 2000 70')
-        # model.load_state_dict(pre_trained_model)
-        # model.eval()
-
         self.model = model
-
-    def test_subprocess(self, unrel, scores, dimensions, exp_id):
-        # rc = Popen(f"{unrel}/run_recall.sh baseline full {scores} '{dimensions}' '{exp_id}'", shell=True)
-        rc = Popen(f"{unrel}/run_recall.sh baseline full {scores} '{dimensions}' '{exp_id}'", shell=True, stdin=PIPE, stdout=PIPE, stderr=STDOUT, close_fds=True)
-        rc_out = str(rc.stdout.read(), 'utf-8')
-        # with open("rc_out.txt","w+") as text_file:
-
-        results = []
-        # print(rc_out)
-        data = rc_out.split('\n')
-        print(f"{data}")
-        for line in data[-8:-1]:
-            print(f"line: {line}")
-            data = line.split()[-1]
-            print(f"data: {data}")
-            if data[0] != 'z':
-                results.append(line.split()[-1])
-        print(f"results: {results}")
-        recalls = {}
-        recalls['seen_predicate'] = results[0]
-        recalls['seen_phrase'] = results[1]
-        recalls['seen_relationship'] = results[2]
-        recalls['unseen_predicate'] = results[3]
-        recalls['unseen_phrase'] = results[4]
-        recalls['unseen_relationship'] = results[5]
-        print(f"recalls: {recalls}")
 
     def recall_from_matlab(self, model):
         # save to .mat, call infer_from_scores.m to evaluate recall
@@ -152,28 +78,37 @@ class RecallEvaluator(object):
         _testset = {}
         testdata = {}
         for setting in settings:
-            print('loading datasets...')
+            print(f'loading datasets...{setting}')
             # initialize dataloaders for both testset
-            _testset[setting] = dset.Dataset(os.path.join(self.DEFAULT_DATAROOT,'vrd-dataset'), 'test', pairs=setting,klass=BasicTestingExample)
+            _testset[setting] = dset.Dataset(os.path.join(self.DEFAULT_DATAROOT,'vrd-dataset'), 'test', pairs=setting, klass=BasicTestingExample)
             testdata[setting] = DataLoader(_testset[setting], 
-                                batch_size=len(_testset[setting]), 
-                                num_workers=4)
+                                batch_size=100, 
+                                num_workers=4) 
             # run prediction for each and save in .mat
+            print(f'calculating scores...')
             for testbatch in testdata[setting]:
-                print('calculating scores...')
-                self.prediction[setting] = self.model(testbatch['X'].cuda())
-                scores_cpu = self.prediction[setting].cpu()
-                scores_np = scores_cpu.data.numpy()
-                mydict = {'scores':scores_np}
-                # sanity check
-                # print(mydict['scores'])
-                # print(f"from dataset: {setting}\nshape: {mydict['scores'].shape}")
-                # save to unrel folder as (ex) "/annotated_<dim>_<id>.mat"
-                print('saving .mat files')
-                scipy.io.savemat(os.path.join(self.SCORES_PATH, f'{setting}.mat'), mydict)
-                # print(f"{setting}.mat file is saved")
-                self.prediction = {}
-                
+                with torch.no_grad():
+                    scores = self.model(torch.autograd.Variable(testbatch['X'].cuda()))
+                cur_prediction = self.prediction.get(setting, None)
+                if type(cur_prediction) is torch.Tensor:
+                    self.prediction[setting] = torch.cat((cur_prediction, scores.cpu()),0)
+                else:
+                    self.prediction[setting] = scores.cpu()
+
+                # self.prediction[setting] = self.model(testbatch['X'].cuda()) 
+            # scores_cpu = self.prediction[setting].cpu()
+            print(f"size of {setting} is: {self.prediction[setting].shape}")
+            scores_np = self.prediction[setting].data.numpy()
+            mydict = {'scores':scores_np}
+            # sanity check
+            # print(mydict['scores'])
+            # print(f"from dataset: {setting}\nshape: {mydict['scores'].shape}")
+            # save to unrel folder as (ex) "/annotated_<dim>_<id>.mat"
+            print(f'saving .mat files...{setting}')
+            scipy.io.savemat(os.path.join(self.SCORES_PATH, f'{setting}.mat'), mydict)
+            # print(f"{setting}.mat file is saved")
+            self.prediction = {}
+
         # use subprocess to run
         print('starting matlab...')
         # rc = Popen(f"{self.UNREL_PATH}/run_recall.sh baseline full {self.SCORES_PATH}", shell=True)
