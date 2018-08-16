@@ -23,15 +23,17 @@ class GenericSolver:
 		self.dtype       = opts.get('dtype', torch.double)
 		self.save_every  = opts.get('save_every', None)
 		self.save_end    = opts.get('save_end', False)
-		self.recalls     = {}
+		self.recall_every = opts.get('recall_every', None)
 	
 	# @arg trainloader should be a Dataloader
 	# @arg testloaders should be a Dataloaders
 	def train(self, trainloader, testloader, *additional_testloaders):
 		self.num_iterations = self.num_epochs * len(trainloader)
 		self.loss_history = torch.Tensor(self.num_iterations)
+
 		# initialize evaluator
-		self.evaluator = RecallEvaluator('/home/SSD2/tyler-data/unrel/data',"/home/tylerjan/code/vrd/unrel","/home/tylerjan/code/vrd/unrel/scores")
+		if self.recall_every:
+			self.evaluator = RecallEvaluator()
 
 		if self.cuda:
 			self.model.cuda()
@@ -60,6 +62,10 @@ class GenericSolver:
 					# Test extra testsets
 					if additional_testloaders:
 						for additional in additional_testloaders: self._test(additional)
+				# Compute recall
+				if self.recall_every and self.iteration % self.recall_every == 0:
+					recalls = self._calc_recall()
+					print('RECALL\t%s' % (' '.join(recalls.values(),)))
 				# Save model
 				if self.save_every and self.iteration % self.save_every == 0:
 					self.save_checkpoint('iter-%d-acc-%f.pth.tar' % (self.iteration, self.acc))
@@ -85,7 +91,6 @@ class GenericSolver:
 		self.model.eval()
 		for testbatch in testloader:
 			loss = self._calc_loss(testbatch['X'], testbatch['y'])
-			# self.recalls = self._calc_recall(self.model)
 			self._print(loss, testloader.dataset.name or 'TEST')
 		return loss
 
@@ -100,7 +105,6 @@ class GenericSolver:
 
 	def _calc_recall(self):
 		recalls = self.evaluator.recall_from_matlab(self.model)
-		print(f"recalls: {recalls}")
 		return recalls
 
 	def save_checkpoint(self, filename='checkpoint.pth'):

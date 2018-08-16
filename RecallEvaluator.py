@@ -18,7 +18,7 @@ from subprocess import Popen, PIPE, STDOUT
 
 
 class RecallEvaluator(object):
-    def __init__(self, dataroot, unrel_path, scores_path):
+    def __init__(self, dataroot=None, unrel_path=None, scores_path=None):
         # model: current model weights
         # dimensions: dimensions of each layer in a list, originally empty
         # prediction: output scores of a forward pass of testset
@@ -27,9 +27,10 @@ class RecallEvaluator(object):
         self.prediction = {}
         self.split = 'test'
         self.pairs = ['annotated', 'Lu-candidates']
-        self.DEFAULT_DATAROOT = dataroot
-        self.UNREL_PATH = unrel_path
-        self.SCORES_PATH = scores_path
+        self.DEFAULT_DATAROOT = dataroot or os.environ['UNREL_DATA']
+        self.UNREL_PATH = unrel_path or os.environ['UNREL_CODE']
+        self.SCORES_PATH = scores_path or '/tmp/recall-evaluator'
+        os.makedirs(self.SCORES_PATH, exist_ok=True)
         
     def predict(self):
         # load model, testdata, and save scores in self.prediction
