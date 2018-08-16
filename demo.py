@@ -1,4 +1,4 @@
-import run.shared as shared
+import run as shared
 
 runner = shared.Runner()
 runner.setup()
