@@ -1,7 +1,7 @@
 # E.g.
 # 	python funnel_runner.py --geom '1000 700 ; ; 1700 800 300 70' --lr 0.001
 
-import shared
+shared = __import__(__package__ or '__init__')
 from classifier import split_model
 import re, os
 import dataset.funnel_dataset as dset

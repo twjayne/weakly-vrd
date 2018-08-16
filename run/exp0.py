@@ -1,5 +1,5 @@
 import torch
-import shared
+shared = __import__(__package__ or "__init__")
 import util.loss
 import demo
 
