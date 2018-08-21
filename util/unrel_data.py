@@ -10,6 +10,7 @@ import sys, os
 import numpy as np
 import scipy.io
 import skimage.io
+import PIL
 import matplotlib.pyplot as plt
 
 _LEGAL_SPLITS = ['train', 'test']
@@ -18,6 +19,7 @@ _LEGAL_SETS   = ['annotated', 'candidates']
 DEFAULT_UNRELDIR = '/home/SSD2/markham-data/unrel'
 DEFAULT_SGDIR    = '/home/SSD2/markham-data/sg_dataset'
 
+# Auxilliary class only used for building a _Fetcher
 class Builder(object):
 	def __init__(self, unreldir=None, sgdir=None):
 		self.meta_path_prefix = os.path.join(unreldir or DEFAULT_UNRELDIR, 'data/vrd-dataset')
@@ -28,6 +30,7 @@ class Builder(object):
 	def split(self, split, which):
 		return _Fetcher(split, which, self.meta_path_prefix, self.data_path_prefix)
 
+# Fetch dataset information: image-level or higher
 class _Fetcher(object):
 	def __init__(self, split, which, meta_path_prefix, data_path_prefix):
 		assert split in _LEGAL_SPLITS
@@ -39,6 +42,8 @@ class _Fetcher(object):
 		self.fnames = [x[0] for x in scipy.io.loadmat(im_names_file)['image_filenames'][0]]
 		obj_names_file = os.path.join(meta_path_prefix, 'vocab_objects.mat')
 		self.obj_names = [x[0][0] for x in scipy.io.loadmat(obj_names_file)['vocab_objects']]
+		pred_names_file = os.path.join(meta_path_prefix, 'vocab_predicates.mat')
+		self.pred_names = [x[0][0] for x in scipy.io.loadmat(pred_names_file)['vocab_predicates']]
 		# Data (image files)
 		self.im_dir = os.path.join(data_path_prefix, 'sg_%s_images' % split)
 
@@ -61,7 +66,7 @@ class _Fetcher(object):
 			fname = self.fname(im_id_or_fname)
 		else:
 			raise Exception('Illegal argument type. Expected int or str. Got %s' % type(im_id_or_fname))
-		return skimage.io.imread(os.path.join(self.im_dir, fname))
+		return PIL.Image.open(os.path.join(self.im_dir, fname))
 
 	def show(self, im_id):
 		image = self.image(im_id)
@@ -73,8 +78,17 @@ class _Fetcher(object):
 			bb = ent.bb()
 			print(ent.name(), bb)
 			plt.figure(num=ent.name())
-			plt.imshow(image[bb[1]:bb[3], bb[0]:bb[2], :])
+			plt.imshow(ent.crop(image))
 
+	def object_cats(fpath=None):
+		arrays = scipy.io.loadmat(fpath or DEFAULT_VOCAB_OBJ_FILE)['vocab_objects'][0]
+		return [x[0] for x in arrays]
+
+	def predicate_cats(fpath=None):
+		arrays = scipy.io.loadmat(fpath or DEFAULT_VOCAB_PRED_FILE)['vocab_predicates'][0]
+		return [x[0] for x in arrays]
+
+# Struct to hold info for a single candidate: BB, im_id, obj_cat, etc
 class Entity(object):
 	def __init__(self, idx, fetcher):
 		self.fetcher = fetcher
@@ -88,6 +102,11 @@ class Entity(object):
 	def bb(self):
 		bb = self.object_box
 		return (bb[0], bb[1], bb[2], bb[3]) # x1, y1, x2, y2
+	# Return a crop of the image, containing only this entity's bounding box. Imdata should be a PIL Image
+	def crop(self, imdata):
+		assert isinstance(imdata, PIL.ImageFile.ImageFile), type(imdata)
+		bb = self.bb()
+		return imdata.crop(bb)
 
 if __name__ == '__main__':
 	fetcher = Builder().split('train', 'annotated')
@@ -95,10 +114,10 @@ if __name__ == '__main__':
 		fetcher.show_bbs(im_id)
 		plt.figure('Image %d' % im_id); fetcher.show(im_id)
 		plt.show()
-		show_all(3)
-		# I see that the VRD dataset out of Stanford poses some challenges.
-		# 'hat' on the skier in Image 9 is just crazy. You can tell by context, but not by the BB.
-		# Same always goes for 'glasses'
-		# A lot of the objects for Image 10 are like this.
-		# 'street' is wrong in Image 11 and 3, at least.
-		# We have a group of people with a lot of space in the middle classified as 'person'. Later we see the same thing classified as 'grass'. It's hard.
+	show_all(3)
+	# I see that the VRD dataset out of Stanford poses some challenges.
+	# 'hat' on the skier in Image 9 is just crazy. You can tell by context, but not by the BB.
+	# Same always goes for 'glasses'
+	# A lot of the objects for Image 10 are like this.
+	# 'street' is wrong in Image 11 and 3, at least.
+	# We have a group of people with a lot of space in the middle classified as 'person'. Later we see the same thing classified as 'grass'. It's hard.
