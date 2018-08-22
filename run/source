@@ -1,0 +1,16 @@
+while getopts "dfo:s" opt "$@"; do
+	case "$opt" in
+		d)
+			DRY_RUN=1;;
+		f)
+			FOREGROUND=1;;
+		o)
+			OUTFILE="$OPTARG";;
+		s)
+			SILENT=1;;
+	esac
+done
+
+
+TRAINFNAMES="$HOME/data/unrel/data/vrd-dataset/image_filenames_train.mat"
+TESTFNAMES="$HOME/data/unrel/data/vrd-dataset/image_filenames_test.mat"

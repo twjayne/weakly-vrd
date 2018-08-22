@@ -1,7 +1,6 @@
 #!/bin/bash
 
-TRAINFNAMES="$HOME/data/unrel/data/vrd-dataset/image_filenames_train.mat"
-TESTFNAMES="$HOME/data/unrel/data/vrd-dataset/image_filenames_test.mat"
+. 'source' "$@"
 
 COUNT=0
 
@@ -24,12 +23,13 @@ function experiment ()
 		fi
 
 		# Other options
-		gpu=$(( ($COUNT + 1) % 3 ))
+		gpu=$(( $COUNT % 3 ))
 		export CUDA_VISIBLE_DEVICES=$gpu 
-		outdir="$HOME/data/weakly-vrd/out/geom $geom"
+		outdir="$HOME/data/weakly-vrd/out/noval scenic-from-matlab w-variable-at-concat/geom $geom"
 
 		# Run
-		nohup python funnel_runner.py \
+		CMD=(\
+		python funnel_runner.py \
 			"$scenic/train" \
 			"$TRAINFNAMES" \
 			"$scenic/test" \
@@ -37,14 +37,37 @@ function experiment ()
 			--outdir "$outdir" \
 			--log "$outdir/out.log" \
 			--geom "$geom" \
-			--ep 50 \
+			--ep 30 \
+			--save-best \
 			--test_every 100 \
-			>/dev/null &
-
+		)
+		if (($DRY_RUN)); then
+			printf "${CMD[0]}"
+			for item in "${CMD[@]:1}"; do
+				printf " \"${item}\""
+			done
+			echo
+		else
+			CMD=(nohup "${CMD[@]}")
+			if (($SILENT)); then
+				OUTFILE=/dev/null
+			else
+				OUTFILE="${OUTFILE:-nohup.out}"
+			fi
+			if (($OUTFILE)); then # no nohup.out file
+				CMD=(nohup "${CMD[@]}")
+			fi
+			if (($FOREGROUND)); then
+				"${CMD[@]}" >>"$OUTFILE"
+			else
+				"${CMD[@]}" >>"$OUTFILE" &
+			fi
+		fi
+			# >/dev/null &
 		COUNT=$(( $COUNT + 1 ))
 	done < <(ls -1 -d $HOME/data/sg_dataset/scenic/pca*)
 }
 
-# experiment '1000 800' '800' '700 70'
+experiment '1000 800' '800' '700 70'
 experiment '' '' '1000 500 250 70'
 experiment '1000 800' '' '700 70'

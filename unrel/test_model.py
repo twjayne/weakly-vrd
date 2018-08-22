@@ -56,32 +56,6 @@ for i in range(1,100):
 		cts[rank:] += 1
 		print('RANK: %3d\tPREDICTION: (#%3d) %12s\t GT: (#%3d) %12s' % (rank, cat_id, obj_names[cat_id], ent.obj_cat, ent.name()))
 
-
-
 print('cts', cts)
 plt.bar( torch.arange(len(cts)), cts.float() / cts[-1].float(), width=1.0 )
 plt.show()
-
-
-# def run_bbs(im_id=890, show=False, verbosity=0):
-# 	global cts
-# 	if im_id % 20 == 0: print('running img', im_id)
-# 	entities = fetcher.entities(im_id)
-# 	im_data = fetcher.image(im_id)
-# 	for ent in entities:
-# 		t = xform(ent.crop(im_data)).cuda()
-# 		t *= 255 # Accomodate for the fact that the model comes from caffe
-# 		t = t.index_select(0, BGR) # Accomodate for the fact that the model comes from caffe
-# 		t -= MEAN # Subtract mean
-# 		t.unsqueeze_(0)
-# 		x = features(t)
-# 		y = classifier(x.view(-1))
-# 		cat_id = torch.argmax(y)
-# 		_,ranks = y.sort(0, True)
-# 		rank = (ranks == int(ent.obj_cat)).nonzero()[0,0]
-# 		cts[rank:] += 1 # Increment all counts >= rank, indicating that the corret result is in the top k predictions
-# 		if verbosity >= 1:
-# 			print('TOP5: %2d\tPREDICTION: (#%d) %12s\t GT: (#%d) %12s' % (in_topk, cat_id, obj_names[cat_id], ent.obj_cat, ent.name()))
-# 		if show:
-# 			t.squeeze_(0)
-# 			toimg(t.cpu()).show()

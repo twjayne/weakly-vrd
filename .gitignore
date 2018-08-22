@@ -5,3 +5,7 @@ log
 *.npy
 log.*
 *.log
+*.pth
+*.tsv
+faster-rcnn
+source

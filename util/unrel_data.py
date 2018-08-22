@@ -102,11 +102,16 @@ class Entity(object):
 	def bb(self):
 		bb = self.object_box
 		return (bb[0], bb[1], bb[2], bb[3]) # x1, y1, x2, y2
-	# Return a crop of the image, containing only this entity's bounding box. Imdata should be a PIL Image
+	# Return a crop of the image, containing only this entity's bounding box.
+	# Imdata should be a PIL Image
+	# Or a tensor of C x H x W
 	def crop(self, imdata):
-		assert isinstance(imdata, PIL.ImageFile.ImageFile), type(imdata)
 		bb = self.bb()
-		return imdata.crop(bb)
+		if isinstance(imdata, PIL.ImageFile.ImageFile):
+			return imdata.crop(bb)
+		elif isinstance(imdata, torch.Tensor):
+			assert imdata.shape[0] == 3, imdata.shape
+			return imdata[:, bb[1]:bb[3], bb[0]:bb[2]]
 
 if __name__ == '__main__':
 	fetcher = Builder().split('train', 'annotated')

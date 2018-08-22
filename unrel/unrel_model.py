@@ -30,8 +30,9 @@ class Model(nn.Module):
 	def __init__(self, features=None, classifier=None, **kwargs):
 		super(Model, self).__init__()
 		self.verbose = kwargs.get('verbose', False)
-		self._init_features(features or './conv.prototxt.statedict.pth')
-		self._init_classifier(classifier or './linear.prototxt.statedict.pth')
+		curdir = os.path.realpath(os.path.join(__file__, '..'))
+		self._init_features(features or os.path.join(curdir, 'conv.prototxt.statedict.pth'))
+		self._init_classifier(classifier or os.path.join(curdir, 'linear.prototxt.statedict.pth'))
 		self.RoIPooling = _RoIPooling(cfg.POOLING_SIZE, cfg.POOLING_SIZE, 1.0/32.0) # This needs to be the ratio of imdata.shape to the shape of the feature map at the end of the convolutional layers. This is architecture-dependent, not image-dependent (though a pixel here or there can cause some small shift in the true ratio).
 		self._batch_index = 0.
 
