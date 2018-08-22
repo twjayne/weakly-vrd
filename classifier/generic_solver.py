@@ -50,7 +50,7 @@ class GenericSolver:
 			for batch_i, batch in enumerate(trainloader):
 				# Train
 				tic = time.time()
-				loss = self._train_step(batch['X'], batch['y'])
+				loss = self._train_step(batch)
 				toc = (time.time() - tic) / len(batch['y'])
 				if self.verbose and batch_i % self.print_every == 0:
 					self._print(loss, 'TRAIN')
@@ -71,10 +71,10 @@ class GenericSolver:
 					self.save_checkpoint('iter-%d-acc-%f.pth.tar' % (self.iteration, self.acc))
 				self.iteration += 1
 	
-	def _train_step(self, batch_X, batch_Y):
+	def _train_step(self, batch):
 		self.model.train()
 		self.optimizer.zero_grad()
-		loss = self._calc_loss(batch_X, batch_Y)
+		loss = self._calc_loss(batch)
 		loss.backward()
 		self.loss_history[self.iteration] = float(loss.data)
 		self.optimizer.step()
@@ -90,11 +90,13 @@ class GenericSolver:
 	def _test(self, testloader):
 		self.model.eval()
 		for testbatch in testloader:
-			loss = self._calc_loss(testbatch['X'], testbatch['y'])
+			loss = self._calc_loss(testbatch)
 			self._print(loss, testloader.dataset.name or 'TEST')
 		return loss
 
-	def _calc_loss(self, batch_X, batch_Y):
+	def _calc_loss(self, batch):
+		batch_X = batch['X']
+		batch_Y = batch['y']
 		if self.cuda:
 			if type(batch_X) is torch.Tensor: batch_X = batch_X.cuda()
 			if type(batch_Y) is torch.Tensor: batch_Y = batch_Y.cuda()

@@ -50,7 +50,7 @@ class Funnel(nn.Module):
 			x['scenic'] = x['scenic'].cuda()
 		a = self.basic(x['basic'])
 		b = self.scenic(x['scenic'])
-		x = torch.cat((a, b), dim=1)
+		x = torch.autograd.Variable(torch.cat((a, b), dim=1))
 		return self.shared(x)
 
 if __name__ == '__main__':
