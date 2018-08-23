@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 import sys, os
 sys.path.append(os.path.realpath(os.path.join(__file__, '../..')))
 import util.matlab
-import util.unrel_data as unrel
+import unrel.unrel_data as unrel
 
 import torch
 import torch.nn as nn

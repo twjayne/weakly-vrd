@@ -19,7 +19,7 @@ import torchvision.transforms
 # Import local modules
 import sys, os
 sys.path.append(os.path.realpath(os.path.join(__file__, '../..')))
-import util.unrel_data as unrel
+import unrel.unrel_data as unrel
 
 # Import faster-rcnn modules
 from model.roi_pooling.modules.roi_pool import _RoIPooling
@@ -34,26 +34,31 @@ class Model(nn.Module):
 		self._init_features(features or os.path.join(curdir, 'conv.prototxt.statedict.pth'))
 		self._init_classifier(classifier or os.path.join(curdir, 'linear.prototxt.statedict.pth'))
 		self.RoIPooling = _RoIPooling(cfg.POOLING_SIZE, cfg.POOLING_SIZE, 1.0/32.0) # This needs to be the ratio of imdata.shape to the shape of the feature map at the end of the convolutional layers. This is architecture-dependent, not image-dependent (though a pixel here or there can cause some small shift in the true ratio).
-		self._batch_index = 0.
+		self._batch_index = 0
 
 	def forward(self, imdata, bbs):
 		# Extract features
-		x = self.features(imdata)
+		x = self.features(self._do_cuda(imdata))
 		# Get ROIs
-		rois = self._rois(x, bbs)
+		rois = self._rois(x, self._do_cuda(bbs))
 		# Classify ROIs
 		scoresets = self.classifier(rois.view(bbs.shape[0],-1))
 		return scoresets
 
 	def _rois(self, features, bbs):
 		batch_index = self._batch_index * torch.ones(bbs.shape[0],1)
-		if features.is_cuda: batch_index = batch_index.cuda()
-		boxes_plus = torch.cat((batch_index, bbs), 1)
-		if features.is_cuda: boxes_plus = boxes_plus.cuda()
+		self._batch_index += 1
+		tensors = ( self._do_cuda(batch_index), self._do_cuda(bbs) )
+		boxes_plus = torch.cat(tensors, 1)
 		return self.RoIPooling(features, boxes_plus)
 
 	def _load_state_dict(self, path_or_dict):
 		return path_or_dict if isinstance(path_or_dict, dict) else torch.load(path_or_dict)
+
+	# Copy tensor to GPU if this model has been copied to the GPU
+	def _do_cuda(self, tensor):
+		if self.is_cuda:
+			tensor.cuda()
 
 	######
 	# FC layers
