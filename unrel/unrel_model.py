@@ -11,6 +11,10 @@
 # RuntimeError: cuda runtime error (77) : an illegal memory access was encountered at /opt/conda/conda-bld/pytorch_1524584710464/work/aten/src/THC/generic/THCTensorCopy.c:70
 # then run with CUDA_LAUNCH_BLOCKING=1
 
+# If you get error
+# RuntimeError: expected stride to be a single integer value or a list of 3 values to match the convolution dimensions, but got stride=[1, 1]
+# then add img.unsqueeze_(0)
+
 import torch
 import torch.nn as nn
 import torchvision.models
@@ -25,6 +29,7 @@ import unrel.unrel_data as unrel
 from model.roi_pooling.modules.roi_pool import _RoIPooling
 from model.utils.config import cfg
 
+import pdb
 
 class Model(nn.Module):
 	def __init__(self, features=None, classifier=None, **kwargs):
@@ -34,21 +39,22 @@ class Model(nn.Module):
 		self._init_features(features or os.path.join(curdir, 'conv.prototxt.statedict.pth'))
 		self._init_classifier(classifier or os.path.join(curdir, 'linear.prototxt.statedict.pth'))
 		self.RoIPooling = _RoIPooling(cfg.POOLING_SIZE, cfg.POOLING_SIZE, 1.0/32.0) # This needs to be the ratio of imdata.shape to the shape of the feature map at the end of the convolutional layers. This is architecture-dependent, not image-dependent (though a pixel here or there can cause some small shift in the true ratio).
-		self._batch_index = 0
 
-	def forward(self, imdata, bbs):
+	def forward(self, batch):
 		# Extract features
-		x = self.features(self._do_cuda(imdata))
+		images_features = [self.features(self._do_cuda(image)) for image in batch['image']]
+		# for i, image in enumerate(batch['image']): assert abs(float(image.shape[2]) / float(images_features[i].shape[2]) - 32.0) < 1 or abs(float(image.shape[3]) / float(images_features[i].shape[3]) - 32.0) < 1, (batch['im_id'][i], image.shape, images_features[i].shape, image.shape[2] / images_features[i].shape[2], image.shape[3] / images_features[i].shape[3])
 		# Get ROIs
-		rois = self._rois(x, self._do_cuda(bbs))
-		# Classify ROIs
-		scoresets = self.classifier(rois.view(bbs.shape[0],-1))
-		return scoresets
-
+		roisets = [self._rois(im_feat, batch['bbs'][i]) for i, im_feat in enumerate(images_features)]
+		# return
+		rois = torch.cat(roisets)
+		# Get appearance features (Classify ROIs)
+		n_rois = rois.shape[0]
+		return self.classifier(rois.view(n_rois, -1)) # Rows alternate subj,obj
+		
 	def _rois(self, features, bbs):
-		batch_index = self._batch_index * torch.ones(bbs.shape[0],1)
-		self._batch_index += 1
-		tensors = ( self._do_cuda(batch_index), self._do_cuda(bbs) )
+		batch_index = torch.zeros(bbs.shape[0],1)
+		tensors = ( self._do_cuda(batch_index), self._do_cuda(bbs).float() )
 		boxes_plus = torch.cat(tensors, 1)
 		return self.RoIPooling(features, boxes_plus)
 
@@ -57,8 +63,8 @@ class Model(nn.Module):
 
 	# Copy tensor to GPU if this model has been copied to the GPU
 	def _do_cuda(self, tensor):
-		if self.is_cuda:
-			tensor.cuda()
+		if next(self.features.parameters()).is_cuda and not tensor.is_cuda:
+			return tensor.cuda()
 
 	######
 	# FC layers

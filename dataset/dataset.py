@@ -12,6 +12,7 @@ else:
     from .example import BasicExample
 import pdb
 
+
 class Dataset(torch.utils.data.dataset.Dataset):
     def __init__(self, dataroot, split, **kwargs):
         self.split = split

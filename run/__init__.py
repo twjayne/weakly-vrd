@@ -19,6 +19,30 @@ DEFAULT_DATAROOT = os.path.join(os.path.dirname(__file__), '..', 'data/vrd-datas
 DEFAULT_LOGDIR   = os.path.join(os.path.dirname(__file__), '..', 'log')
 NUM_WORKERS = 4
 
+# Parse command line args
+parser = OptionParser()
+parser.add_option('--data', dest='dataroot', default=DEFAULT_DATAROOT)
+parser.add_option('--lr', dest='lr', default=0.001, type="float")
+parser.add_option('--bs', dest='batch_size', default=32, type="int")
+parser.add_option('--ep', dest='num_epochs', default=30, type="int")
+parser.add_option('-N', dest='train_size', default=None, type="int")
+parser.add_option('--val', dest='val', default=None, type="float", help="percentage of the primary test set to use (used as validation; remainder is unused)")
+parser.add_option('--noval', action='store_false', default=True, dest='do_validation')
+parser.add_option('--cpu', action='store_false', default=True, dest='cuda')
+parser.add_option('--logdir', dest='logdir', default='log')
+parser.add_option('--log', '--logfile', dest='logfile', default=None)
+parser.add_option('--geom', dest='geometry', default='1000 2000 2000 70')
+parser.add_option('--nosched', dest='no_scheduler', default=False, action='store_true')
+parser.add_option('--patience', dest='patience', default=10, type="int")
+parser.add_option('--test_every', dest='test_every', default=None, type='int')
+parser.add_option('--print_every', dest='print_every', default=None, type='int')
+parser.add_option('--save', dest='save_every', default=None, type='int')
+parser.add_option('--end-save', dest='save_at_end', default=False, action='store_true')
+parser.add_option('--save-best', dest='save_best', default=False, action='store_true')
+parser.add_option('--outdir', dest='outdir', default=None, help="Used for saving checkpoints, etc.")
+parser.add_option('--nosplitzs', dest='split_zeroshot', default=True, action='store_false')
+parser.add_option('--recall', dest='recall_every', default=0, type='int')
+
 class Runner(object):
 
     def __init__(self):
@@ -27,36 +51,14 @@ class Runner(object):
         self.optimizer = None
         self.scheduler = None
         self.solver = None
-        # Parse command line args
-        parser = OptionParser()
-        parser.add_option('--data', dest='dataroot', default=DEFAULT_DATAROOT)
-        parser.add_option('--lr', dest='lr', default=0.001, type="float")
-        parser.add_option('--bs', dest='batch_size', default=32, type="int")
-        parser.add_option('--ep', dest='num_epochs', default=30, type="int")
-        parser.add_option('-N', dest='train_size', default=None, type="int")
-        parser.add_option('--val', dest='val', default=None, type="float", help="percentage of the primary test set to use (used as validation; remainder is unused)")
-        parser.add_option('--noval', action='store_false', default=True, dest='do_validation')
-        parser.add_option('--cpu', action='store_false', default=True, dest='cuda')
-        parser.add_option('--logdir', dest='logdir', default='log')
-        parser.add_option('--log', '--logfile', dest='logfile', default=None)
-        parser.add_option('--geom', dest='geometry', default='1000 2000 2000 70')
-        parser.add_option('--nosched', dest='no_scheduler', default=False, action='store_true')
-        parser.add_option('--patience', dest='patience', default=10, type="int")
-        parser.add_option('--test_every', dest='test_every', default=None, type='int')
-        parser.add_option('--print_every', dest='print_every', default=None, type='int')
-        parser.add_option('--save', dest='save_every', default=None, type='int')
-        parser.add_option('--end-save', dest='save_at_end', default=False, action='store_true')
-        parser.add_option('--save-best', dest='save_best', default=False, action='store_true')
-        parser.add_option('--outdir', dest='outdir', default=None, help="Used for saving checkpoints, etc.")
-        parser.add_option('--nosplitzs', dest='split_zeroshot', default=True, action='store_false')
-        parser.add_option('--recall', dest='recall_every', default=0, type='int')
         self.opts, self.args = parser.parse_args()
         opts = self.opts
         # Set logger
         if self.opts.logfile:
             logger.Logger(self.opts.logfile)
-        elif self.opts.logdir:
-            logger.Logger(self.opts.logdir, 'N-%d ep-%d lr-%f geom-%s hash-%d.log' %
+        elif self.opts.logdir or self.opts.outdir:
+            logger.Logger(self.opts.logdir or self.opts.outdir,
+                'N-%d ep-%d lr-%f geom-%s hash-%d.log' %
                 (opts.train_size or 0, opts.num_epochs, opts.lr, opts.geometry, hash(frozenset(opts.__dict__))))
         print(opts)
 
