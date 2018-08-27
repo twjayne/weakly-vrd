@@ -45,6 +45,7 @@ class RecallEvaluator(object):
         self.dataset = 'vrd-dataset'
         self.candidatespairs = 'annotated'
         self.annotatedpairs = 'annotated'
+        self.alpha_objects = 0.5
 
 
     def evaluate_recall(self, model, supervision, language):
@@ -53,7 +54,6 @@ class RecallEvaluator(object):
         self.supervision = supervision
         self.use_languagescores = language
         seen_recalls = self.infer(False) 
-        # sys.exit('...end of testing...')
         unseen_recalls = self.infer(True) # zeroshot
         self.recalls = {'seen_predicate':seen_recalls[0], 'seen_phrase':seen_recalls[1], 'seen_relationship':seen_recalls[2], 'unseen_predicate':unseen_recalls[0], 'unseen_phrase':unseen_recalls[1], 'unseen_relationship':unseen_recalls[2]}
 
@@ -63,8 +63,9 @@ class RecallEvaluator(object):
         self.zeroshot = zeroshot
         self.candidatespairs = 'annotated'
         self.use_objectscores = False
-        print(f"zeroshot setting: {zeroshot}")
-        print(f"Predicate Detection...")
+        # print(f"Zeroshot setting...{zeroshot}")
+        # print(f"Using language scores...{self.use_languagescores}")
+        # print(f"Predicate Detection...")
         pairs, scores, annotations = self.predict()
         # np.save('predictions1.npy', scores)
         # scores = np.load('predictions1.npy')
@@ -72,7 +73,7 @@ class RecallEvaluator(object):
         recall_predicate, _ = self.top_recall_Relationship(self.Nre, candidates, groundtruth)
         self.candidatespairs = 'Lu-candidates'
         self.use_objectscores = True
-        print(f'Phrase/Relationship Detection...')
+        # print(f'Phrase/Relationship Detection...')
         pairs, scores, annotations = self.predict()
         # np.save('predictions2.npy', scores)
         # scores = np.load('predictions2.npy')
@@ -81,7 +82,6 @@ class RecallEvaluator(object):
         recall_phrase, _ = self.top_recall_Phrase(self.Nre, candidates, groundtruth)
 
         return [recall_predicate, recall_phrase, recall_relationship]
-        # return [recall_predicate, '0', recall_relationship]
     def top_recall_Phrase(self, Nre, candidates, groundtruth):
         tuple_confs_cell = candidates['scores']
         tuple_labels_cell = candidates['triplet']
@@ -91,7 +91,6 @@ class RecallEvaluator(object):
         gt_tuple_label = groundtruth['triplet']
         gt_sub_bboxes = groundtruth['sub_box']
         gt_obj_bboxes = groundtruth['obj_box']
-
         # sort candidates by confidence scores
         num_images = len(gt_tuple_label)
         for i in range(num_images):
@@ -103,6 +102,7 @@ class RecallEvaluator(object):
             tuple_labels_cell[i] = tuple_labels_cell[i][:,ind]
             obj_bboxes_cell[i] = obj_bboxes_cell[i][ind,:]
             sub_bboxes_cell[i] = sub_bboxes_cell[i][ind,:]
+
         
         num_pos_tuple = 0
         for i in range(num_images):
@@ -112,26 +112,19 @@ class RecallEvaluator(object):
         fp_cell = []
 
         gt_thr = 0.5
-        show = True
-        # count1 = 0
-        # count2 = 0
-        # count3 = 0
-        # count4 = 0
-        # count5 = 0
+        
 
         for i in range(num_images):
 
             gt_tupLabel = gt_tuple_label[i]
 
-            if gt_obj_bboxes[i].size != 0:
+            if gt_obj_bboxes[i].shape[0] == 0 or gt_obj_bboxes[i].shape[1] == 0:
+                gt_box_entity = []
+            else:
                 c = np.minimum(gt_obj_bboxes[i][:,0:2],gt_sub_bboxes[i][:,0:2])
                 d = np.maximum(gt_obj_bboxes[i][:,2:4],gt_sub_bboxes[i][:,2:4])
-                # print(c, type(np.asarray(c)), np.asarray(c).shape)
-                # print(d, type(np.asarray(d)), np.asarray(d).shape)
-                gt_box_entity = np.hstack((c,d))
 
-            else:
-                gt_box_entity = []                
+                gt_box_entity = np.hstack((c,d))
 
             num_gt_tuple = len(gt_tupLabel[0])
             gt_detected = np.zeros(num_gt_tuple)
@@ -141,14 +134,13 @@ class RecallEvaluator(object):
             boxObj = obj_bboxes_cell[i]
             boxSub = sub_bboxes_cell[i]
 
-            if boxObj.size != 0:
+            if boxObj.shape[0] == 0 or boxObj.shape[1] == 0:
+                box_entity_our = []
+            else:
                 c = np.minimum(boxObj[:,0:2],boxSub[:,0:2])
                 d = np.maximum(boxObj[:,2:4],boxSub[:,2:4])
-                # print(c, type(np.asarray(c)), np.asarray(c).shape)
-                # print(d, type(np.asarray(d)), np.asarray(d).shape)
+
                 box_entity_our = np.hstack((c,d))
-            else:
-                box_entity_our = []
 
             num_obj = len(labels[0])
             tp = np.zeros([1, num_obj])
@@ -156,7 +148,7 @@ class RecallEvaluator(object):
 
             for j in range(num_obj):
 
-                bbO = boxObj[j,:]
+                bbO = box_entity_our[j,:]
                 ovmax = -math.inf
                 kmax = -1
 
@@ -259,7 +251,7 @@ class RecallEvaluator(object):
         fp_cell = []
 
         gt_thr = 0.5
-        show = True
+        
         # count1 = 0
         # count2 = 0
         # count3 = 0
@@ -469,25 +461,72 @@ class RecallEvaluator(object):
 
         testloader = self.create_testloader()
         prediction = self.calc_scores(testloader)
+        N, C = prediction.shape
 
         if self.use_languagescores:
-            print(f'Computing language scores...')
-            # TODO
-        elif self.use_objectscores:
-            print(f'Loading the object scores...')
-            # TODO
+            # print(f'Computing language scores...')
+            features_language = self.load_languagefeatures(pairs)
 
-        # return (pairs, {}, annotations)
+        object_scores = np.ones(prediction.shape)
+        if self.use_objectscores:
+            # print(f'Loading the object scores...')
+            datafolder = os.path.join(self.DEFAULT_DATAROOT, 'vrd-dataset', self.split, self.candidatespairs)
+            object_scores = self.load_objectscores(datafolder, pairs)
+            # add scores to each column
+            a = object_scores.reshape([-1,1])
+            b = np.ones([1,C])
+            object_scores = object_scores.reshape([-1,1])*np.ones([1,C])
+            prediction = prediction + self.alpha_objects*object_scores
+
         return (pairs, prediction, annotations)
 
+    def load_languagefeatures(self, pairs):
+        obj2vec = scipy.io.loadmat(os.path.join(self.DEFAULT_DATAROOT, 'vrd-dataset','obj2vec.mat'))
+        vocab_objects = scipy.io.loadmat(os.path.join(self.DEFAULT_DATAROOT, 'vrd-dataset','vocab_objects.mat'))['vocab_objects']
+        print(obj2vec)
+        N = pairs['im_id'].shape[0]
+        X = np.zeros([N, 600])
+
+        sub_cat = pairs['sub_cat'][0]-1
+        print(sub_cat)
+        obj_cat = pairs['obj_cat'][0]-1
+        print(obj_cat)
+        print(type(vocab_objects))
+        sub_cat = str(vocab_objects[sub_cat][0,0][0])
+        print(sub_cat)
+        obj_cat = str(vocab_objects[obj_cat][0,0][0])
+        print(obj_cat)
+        X[0,:] = [obj2vec[sub_cat], obj2vec[obj_cat]]
+
+
+        return None
+
+    def load_objectscores(self, datafolder, pairs):
+        N = pairs['im_id'].shape[0]
+        scores = np.zeros((N))
+        objectscores = scipy.io.loadmat(os.path.join(datafolder, 'objectscores.mat'))['scores']
+
+        for j in range(N):
+            sub_id = pairs['sub_id'][j]
+            sub_cat = pairs['sub_cat'][j]
+            idx = objectscores[:,0] == sub_id
+            sub_scores = np.squeeze(objectscores[idx,1:],axis=0)
+            obj_id = pairs['obj_id'][j]
+            obj_cat = pairs['obj_cat'][j]
+            idx = objectscores[:,0] == obj_id
+            obj_scores = np.squeeze(objectscores[idx,1:],axis=0)
+            scores[j] = sub_scores[sub_cat] + obj_scores[obj_cat]
+
+        return scores
+
     def create_testloader(self):
-        print(f"loading dataset...{self.candidatespairs}")
+        # print(f"loading dataset...{self.candidatespairs}")
         testset = dset.Dataset(os.path.join(self.DEFAULT_DATAROOT, 'vrd-dataset'), self.split, pairs=self.candidatespairs, klass=BasicTestingExample)
         testloader = DataLoader(testset, batch_size=100, num_workers=4)
         return testloader
 
     def calc_scores(self, testloader):
-        print(f"calculating scores...")
+        # print(f"calculating scores...")
         prediction = None
         for testbatch in testloader:
             with torch.no_grad():
@@ -497,7 +536,6 @@ class RecallEvaluator(object):
             else:
                 prediction = scores.cpu()
             scores = None
-        # print(f"prediction size of {self.candidatespairs} is: {prediction.shape}")
 
         return prediction.data.numpy()
 
@@ -552,14 +590,14 @@ class RecallEvaluator(object):
         _testset = {}
         testdata = {}
         for setting in settings:
-            print(f'loading datasets...{setting}')
+            # print(f'loading datasets...{setting}')
             # initialize dataloaders for both testset
             _testset[setting] = dset.Dataset(os.path.join(self.DEFAULT_DATAROOT,'vrd-dataset'), 'test', pairs=setting, klass=BasicTestingExample)
             testdata[setting] = DataLoader(_testset[setting], 
                                 batch_size=100, 
                                 num_workers=4) 
             # run prediction for each and save in .mat
-            print(f'calculating scores...')
+            # print(f'calculating scores...')
             for testbatch in testdata[setting]:
                 with torch.no_grad():
                     scores = self.model(torch.autograd.Variable(testbatch['X'].cuda()))
@@ -578,32 +616,31 @@ class RecallEvaluator(object):
             # print(mydict['scores'])
             # print(f"from dataset: {setting}\nshape: {mydict['scores'].shape}")
             # save to unrel folder as (ex) "/annotated_<dim>_<id>.mat"
-            print(f'saving .mat files...{setting}')
+            # print(f'saving .mat files...{setting}')
             scipy.io.savemat(os.path.join(self.SCORES_PATH, f'{setting}.mat'), mydict)
             # print(f"{setting}.mat file is saved")
             self.prediction = {}
 
         # use subprocess to run
         print('starting matlab...')
-        # rc = Popen(f"{self.UNREL_PATH}/run_recall.sh baseline full {self.SCORES_PATH}", shell=True)
-        # sys.exit('...ending python code...')
-        # return {}
 
         rc = Popen(f"{self.UNREL_PATH}/run_recall.sh baseline full {self.SCORES_PATH}", shell=True, stdin=PIPE, stdout=PIPE, stderr=STDOUT, close_fds=True)
         rc_out = str(rc.stdout.read(), 'utf-8')
-        # print(rc_out)
+        # rc = Popen(f"{self.UNREL_PATH}/run_recall.sh baseline full {self.SCORES_PATH}", shell=True, stdin=PIPE, stdout=PIPE, stderr=STDOUT, close_fds=True, bufsize=1)
+        # for line in iter(rc.stdout.readline,b''):
+        #     print(line)
+        # rc.stdout.close()
+        # rc.wait()
+        # return {}
 
         results = []
-        # print(rc_out)
         data = rc_out.split('\n')
-        # print(f"{data}")
+
         for line in data[-8:-1]:
-            # print(f"line: {line}")
             data = line.split()[-1]
-            # print(f"data: {data}")
             if data[0] != 'z':
                 results.append(line.split()[-1])
-        # print(f"results: {results}")
+
         recalls = {}
         recalls['seen_predicate'] = results[0]
         recalls['seen_phrase'] = results[1]
@@ -611,7 +648,6 @@ class RecallEvaluator(object):
         recalls['unseen_predicate'] = results[3]
         recalls['unseen_phrase'] = results[4]
         recalls['unseen_relationship'] = results[5]
-        # print(f"recalls: {recalls}")
 
         return recalls
 
