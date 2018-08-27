@@ -394,7 +394,7 @@ class RecallEvaluator(object):
         # format outputs to match evaluation code of Lu16
         # load zeroshot setting
         if self.zeroshot:
-            ind_zeroshot = scipy.io.loadmat(os.path.join(self.DEFAULT_DATAROOT, 'vrd-dataset', 'test', 'annotated', 'ind_zeroshot.mat'))['ind_zeroshot']
+            ind_zeroshot = scipy.io.loadmat(os.path.join(self.DEFAULT_DATAROOT, self.dataset, 'test', 'annotated', 'ind_zeroshot.mat'))['ind_zeroshot']
             ind_zeroshot = ind_zeroshot - 1
             ind_zeroshot = np.squeeze(ind_zeroshot, axis=1)
             # print(f'new index: {ind_zeroshot}, shape: {ind_zeroshot.shape}')
@@ -470,7 +470,7 @@ class RecallEvaluator(object):
         object_scores = np.ones(prediction.shape)
         if self.use_objectscores:
             # print(f'Loading the object scores...')
-            datafolder = os.path.join(self.DEFAULT_DATAROOT, 'vrd-dataset', self.split, self.candidatespairs)
+            datafolder = os.path.join(self.DEFAULT_DATAROOT, self.dataset, self.split, self.candidatespairs)
             object_scores = self.load_objectscores(datafolder, pairs)
             # add scores to each column
             a = object_scores.reshape([-1,1])
@@ -481,8 +481,8 @@ class RecallEvaluator(object):
         return (pairs, prediction, annotations)
 
     def load_languagefeatures(self, pairs):
-        obj2vec = scipy.io.loadmat(os.path.join(self.DEFAULT_DATAROOT, 'vrd-dataset','obj2vec.mat'))
-        vocab_objects = scipy.io.loadmat(os.path.join(self.DEFAULT_DATAROOT, 'vrd-dataset','vocab_objects.mat'))['vocab_objects']
+        obj2vec = scipy.io.loadmat(os.path.join(self.DEFAULT_DATAROOT, self.dataset,'obj2vec.mat'))
+        vocab_objects = scipy.io.loadmat(os.path.join(self.DEFAULT_DATAROOT, self.dataset,'vocab_objects.mat'))['vocab_objects']
         print(obj2vec)
         N = pairs['im_id'].shape[0]
         X = np.zeros([N, 600])
@@ -521,7 +521,7 @@ class RecallEvaluator(object):
 
     def create_testloader(self):
         # print(f"loading dataset...{self.candidatespairs}")
-        testset = dset.Dataset(os.path.join(self.DEFAULT_DATAROOT, 'vrd-dataset'), self.split, pairs=self.candidatespairs, klass=BasicTestingExample)
+        testset = dset.Dataset(os.path.join(self.DEFAULT_DATAROOT, self.dataset), self.split, pairs=self.candidatespairs, klass=BasicTestingExample)
         testloader = DataLoader(testset, batch_size=100, num_workers=4)
         return testloader
 
@@ -559,14 +559,14 @@ class RecallEvaluator(object):
 
     def get_full_annotations(self):
         # loads pairs.mat from vrd-dataset/test/annotated in...dict?
-        annotated = scipy.io.loadmat(os.path.join(self.DEFAULT_DATAROOT, 'vrd-dataset', self.split, 'annotated', 'pairs.mat'))['pairs'][0,0]
+        annotated = scipy.io.loadmat(os.path.join(self.DEFAULT_DATAROOT, self.dataset, self.split, 'annotated', 'pairs.mat'))['pairs'][0,0]
         annotated = self.convert_to_dict(annotated)
         # to access: annotated['rel_id']
         return annotated
 
     def load_candidates(self, candidatespairs):
         # loads pairs.mat from vrd-dataset/test/Lu-candidates in...dict?
-        candidatespairs = scipy.io.loadmat(os.path.join(self.DEFAULT_DATAROOT, 'vrd-dataset', self.split, candidatespairs, 'pairs.mat'))['pairs'][0,0]
+        candidatespairs = scipy.io.loadmat(os.path.join(self.DEFAULT_DATAROOT, self.dataset, self.split, candidatespairs, 'pairs.mat'))['pairs'][0,0]
         candidatespairs = self.convert_to_dict(candidatespairs)
         # to access: candidates['sub_cat']
         return candidatespairs
@@ -592,7 +592,7 @@ class RecallEvaluator(object):
         for setting in settings:
             # print(f'loading datasets...{setting}')
             # initialize dataloaders for both testset
-            _testset[setting] = dset.Dataset(os.path.join(self.DEFAULT_DATAROOT,'vrd-dataset'), 'test', pairs=setting, klass=BasicTestingExample)
+            _testset[setting] = dset.Dataset(os.path.join(self.DEFAULT_DATAROOT,self.dataset), 'test', pairs=setting, klass=BasicTestingExample)
             testdata[setting] = DataLoader(_testset[setting], 
                                 batch_size=100, 
                                 num_workers=4) 
