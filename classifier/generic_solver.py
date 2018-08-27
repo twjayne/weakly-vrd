@@ -24,10 +24,8 @@ class GenericSolver:
 		self.save_every  = opts.get('save_every', None)
 		self.save_end    = opts.get('save_end', False)
 		self.recall_every = opts.get('recall_every', None)
-	
-	# @arg trainloader should be a Dataloader
-	# @arg testloaders should be a Dataloaders
-	def train(self, trainloader, testloader, *additional_testloaders):
+
+	def init_train(self, trainloader):
 		self.num_iterations = self.num_epochs * len(trainloader)
 		self.loss_history = torch.Tensor(self.num_iterations)
 
@@ -46,12 +44,17 @@ class GenericSolver:
 
 		self.best_acc = 0
 		self.iteration = 0
+	
+	# @arg trainloader should be a Dataloader
+	# @arg testloaders should be a Dataloaders
+	def train(self, trainloader, testloader, *additional_testloaders):
+		self.init_train(trainloader)
 		for self.epoch in range(self.num_epochs):
 			for batch_i, batch in enumerate(trainloader):
 				# Train
 				tic = time.time()
 				loss = self._train_step(batch)
-				toc = (time.time() - tic) / len(batch['y'])
+				toc = (time.time() - tic) / (len(batch['y']) if 'y' in batch else batch['N'])
 				if self.verbose and batch_i % self.print_every == 0:
 					self._print(loss, 'TRAIN')
 				if self.scheduler and testloader is None:
@@ -89,10 +92,15 @@ class GenericSolver:
 
 	def _test(self, testloader):
 		self.model.eval()
-		for testbatch in testloader:
+		total = 0.
+		quotient = 0
+		for batch_i, testbatch in enumerate(testloader):
 			loss = self._calc_loss(testbatch)
-			self._print(loss, testloader.dataset.name or 'TEST')
-		return loss
+			total += float(loss.cpu().item())
+			quotient += len(testbatch)
+		avg_loss = total / quotient
+		self._print(avg_loss, testloader.dataset.name or 'TEST')
+		return avg_loss
 
 	def _calc_loss(self, batch):
 		batch_X = batch['X']
@@ -136,3 +144,24 @@ class GenericSolver:
 
 WEAK = 'weak'
 FULL = 'full'
+
+
+import subprocess
+def get_gpu_memory_map():
+    """Get the current gpu usage.
+
+    Returns
+    -------
+    usage: dict
+        Keys are device ids as integers.
+        Values are memory usage as integers in MB.
+    """
+    result = subprocess.check_output(
+        [
+            'nvidia-smi', '--query-gpu=memory.used',
+            '--format=csv,nounits,noheader'
+        ], encoding='utf-8')
+    # Convert lines into a dictionary
+    gpu_memory = [int(x) for x in result.strip().split('\n')]
+    gpu_memory_map = dict(zip(range(len(gpu_memory)), gpu_memory))
+    return gpu_memory_map
