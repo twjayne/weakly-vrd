@@ -27,9 +27,9 @@ class RecallEvaluator(object):
 
         self.split = 'test'
         self.pairs = ['annotated', 'Lu-candidates']
-        self.DEFAULT_DATAROOT = dataroot # or os.environ['UNREL_DATA']
-        self.UNREL_PATH = unrel_path # or os.environ['UNREL_CODE']
-        self.SCORES_PATH = scores_path # or '/tmp/recall-evaluator'
+        self.DEFAULT_DATAROOT = dataroot or os.environ['UNREL_DATA']
+        self.UNREL_PATH = unrel_path or os.environ['UNREL_CODE']
+        self.SCORES_PATH = scores_path or '/tmp/recall-evaluator'
         os.makedirs(self.SCORES_PATH, exist_ok=True)
 
         self.recalls = {}

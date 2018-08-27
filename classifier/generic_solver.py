@@ -114,6 +114,10 @@ class GenericSolver:
 		return self.loss_fn( self.prediction, batch_Y.reshape(-1) )
 
 	def _calc_recall(self):
+		recalls = self.evaluator.evaluate_recall(self.model, self.supervision, False) # False for language scroes (not using language scores, yet)
+		return recalls
+
+	def _calc_recall_matlab(self):
 		recalls = self.evaluator.recall_from_matlab(self.model)
 		return recalls
 
