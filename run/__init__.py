@@ -8,6 +8,8 @@ import os, datetime as dt
 import torch.nn as nn
 from classifier.generic_solver import GenericSolver as Solver
 from optparse import OptionParser
+import datetime
+
 import pdb
 
 import util.loss
@@ -24,6 +26,7 @@ parser = OptionParser()
 parser.add_option('--data', dest='dataroot', default=DEFAULT_DATAROOT)
 parser.add_option('--lr', dest='lr', default=0.001, type="float")
 parser.add_option('--bs', dest='batch_size', default=32, type="int")
+parser.add_option('--tbs', dest='test_batch_size', default=32, type="int", help="for cases where memory is a bigger constraint on the test set")
 parser.add_option('--ep', dest='num_epochs', default=30, type="int")
 parser.add_option('-N', dest='train_size', default=None, type="int")
 parser.add_option('--val', dest='val', default=None, type="float", help="percentage of the primary test set to use (used as validation; remainder is unused)")
@@ -32,7 +35,7 @@ parser.add_option('--cpu', action='store_false', default=True, dest='cuda')
 parser.add_option('--logdir', dest='logdir', default='log')
 parser.add_option('--log', '--logfile', dest='logfile', default=None)
 parser.add_option('--geom', dest='geometry', default='1000 2000 2000 70')
-parser.add_option('--nosched', dest='no_scheduler', default=False, action='store_true')
+parser.add_option('--nosched', dest='no_scheduler', default=True, action='store_true')
 parser.add_option('--patience', dest='patience', default=10, type="int")
 parser.add_option('--test_every', dest='test_every', default=None, type='int')
 parser.add_option('--print_every', dest='print_every', default=None, type='int')
@@ -42,89 +45,107 @@ parser.add_option('--save-best', dest='save_best', default=False, action='store_
 parser.add_option('--outdir', dest='outdir', default=None, help="Used for saving checkpoints, etc.")
 parser.add_option('--nosplitzs', dest='split_zeroshot', default=True, action='store_false')
 parser.add_option('--recall', dest='recall_every', default=0, type='int')
+parser.add_option('--load', dest='load', default=None, help='Model or state_dict to load')
+parser.add_option('-s', help='Save initialized, untrained model', dest='save_initialized_model')
 
 class Runner(object):
 
-    def __init__(self):
-        # Initialize
-        self.model = None
-        self.optimizer = None
-        self.scheduler = None
-        self.solver = None
-        self.opts, self.args = parser.parse_args()
-        opts = self.opts
-        # Set logger
-        if self.opts.logfile:
-            logger.Logger(self.opts.logfile)
-        elif self.opts.logdir or self.opts.outdir:
-            logger.Logger(self.opts.logdir or self.opts.outdir,
-                'N-%d ep-%d lr-%f geom-%s hash-%d.log' %
-                (opts.train_size or 0, opts.num_epochs, opts.lr, opts.geometry, hash(frozenset(opts.__dict__))))
-        print(opts)
+	def __init__(self):
+		# Initialize
+		self.model = None
+		self.optimizer = None
+		self.scheduler = None
+		self.solver = None
+		self.opts, self.args = parser.parse_args()
+		opts = self.opts
+		# Set logger
+		if self.opts.logfile:
+			logger.Logger(self.opts.logfile)
+		elif self.opts.logdir or self.opts.outdir:
+			logger.Logger(self.opts.logdir or self.opts.outdir,
+				'%s N-%d ep-%d lr-%f geom-%s.log' %
+				(datetime.datetime.now().strftime('%Y%m%d%H%M'), opts.train_size or 0, opts.num_epochs, opts.lr, opts.geometry))
+		print(opts)
 
-    def setup(self):
-        print('Init...')
-        self.setup_model()
-        self.setup_opt()
-        print('Initializing dataset(s)...')
-        self.setup_data()
+	def setup(self):
+		print('Init...')
+		self.setup_model()
+		self.setup_opt()
+		print('Initializing dataset(s)...')
+		self.setup_data()
 
-    def setup_model(self):
-        # Define model
-        if self.model == None:
-            print('Building model')
-            layer_widths = [int(x) for x in self.opts.geometry.split(' ')]
-            print('Geometry: %s' % (' '.join((str(x) for x in layer_widths))))
-            def model_generator(layer_widths, is_batch_gt_1):
-                for i in range(1, len(layer_widths)):
-                    yield nn.Linear(layer_widths[i-1], layer_widths[i])
-                    if i < len(layer_widths) - 1: # All except the last
-                        yield nn.Dropout()
-                        yield nn.BatchNorm1d(layer_widths[i])
-                        yield nn.ReLU()
-            layers = list(model_generator(layer_widths, self.opts.train_size == 1))
-            self.model  = nn.Sequential(*layers).double()
+	def setup_model(self):
+		# Define model
+		if self.model == None:
+			if self.opts.load:
+				print('Loading model')
+				from_file = torch.load(self.opts.load)
+				if isinstance(from_file, torch.nn.Module):
+					self.model = from_file
+				else:
+					self.model = self._build_model()
+					self.model.load_state_dict(from_file)
+			else:
+				self.model = self._build_model()
 
-    def setup_opt(self):
-        # Define optimizer, scheduler, solver
-        if self.optimizer == None:
-            print('Building optimizer...')
-            self.optimizer = torch.optim.Adam(self.model.parameters(), lr=self.opts.lr)
-        if self.scheduler == None:
-            print('Building scheduler...')
-            self.scheduler = None if self.opts.no_scheduler else torch.optim.lr_scheduler.ReduceLROnPlateau(self.optimizer, verbose=True, patience=self.opts.patience)
-        if self.solver == None:
-            print('Building solver...')
-            self.solver = Solver(self.model, self.optimizer, verbose=True, scheduler=self.scheduler, **self.opts.__dict__)
+	def _build_model(self):
+		print('Building model')
+		layer_widths = [int(x) for x in self.opts.geometry.split(' ')]
+		print('Geometry: %s' % (' '.join((str(x) for x in layer_widths))))
+		def model_generator(layer_widths, is_batch_gt_1):
+			for i in range(1, len(layer_widths)):
+				yield nn.Linear(layer_widths[i-1], layer_widths[i])
+				if i < len(layer_widths) - 1: # All except the last
+					yield nn.Dropout()
+					yield nn.BatchNorm1d(layer_widths[i])
+					yield nn.ReLU()
+		layers = list(model_generator(layer_widths, self.opts.train_size == 1))
+		model = nn.Sequential(*layers).double()
+		if self.opts.save_initialized_model:
+			print('Saving initialized model to %s' % (self.opts.save_initialized_model,))
+			torch.save(self.model, self.opts.save_initialized_model)
+		return model
 
-    def setup_data(self):
-        # Initialize trainset
-        dataroot = self.opts.dataroot
-        _trainset = dset.Dataset(dataroot, 'train', pairs='annotated')
-        self.trainloader = dat.DataLoader(_trainset, batch_size=self.opts.batch_size, shuffle=True, num_workers=4)
+	def setup_opt(self):
+		# Define optimizer, scheduler, solver
+		if self.optimizer == None:
+			print('Building optimizer...')
+			self.optimizer = torch.optim.Adam(self.model.parameters(), lr=self.opts.lr)
+		if self.scheduler == None:
+			print('Building scheduler...')
+			self.scheduler = None if self.opts.no_scheduler else torch.optim.lr_scheduler.ReduceLROnPlateau(self.optimizer, verbose=True, patience=self.opts.patience)
+		if self.solver == None:
+			print('Building solver...')
+			self.solver = Solver(self.model, self.optimizer, verbose=True, scheduler=self.scheduler, **self.opts.__dict__)
 
-        # Use subset of train data
-        if self.opts.train_size: # if --N: override the __len__ method of the dataset so that only the first N items will be used
-            def train_size(unused): return self.opts.train_size
-            _trainset.__class__.__len__ = train_size
+	def setup_data(self):
+		# Initialize trainset
+		dataroot = self.opts.dataroot
+		_trainset = dset.Dataset(dataroot, 'train', pairs='annotated')
+		self.trainloader = dat.DataLoader(_trainset, batch_size=self.opts.batch_size, shuffle=True, num_workers=4)
 
-        # Initialize testset
-        if self.opts.do_validation: # Defatult True
-            _testset = dset.Dataset(dataroot, 'test', pairs='annotated')
-            if self.opts.split_zeroshot: # Split testset into seen and zeroshot sets
-                test_sets = zeroshot.Splitter(_trainset, _testset).split()
-                self.testloaders = [dat.DataLoader(data, batch_size=len(data), num_workers=NUM_WORKERS) for data in test_sets]
-            else: # Use a single (unified) testset
-                testdata = dat.DataLoader(_testset, batch_size=len(_testset), num_workers=NUM_WORKERS)
-                self.testloaders = [testdata]
-            if self.opts.val: # Use only x percent of the primary testset as validation (and don't use the rest at this time)
-                dataset = self.testloaders[0].dataset
-                n = int(len(dataset) * self.opts.val)
-                sampler = dat.SubsetRandomSampler(torch.arange(n))
-                self.testloaders[0] = dat.DataLoader(dataset, batch_size=n, sampler=sampler, num_workers=NUM_WORKERS)
-        else: # if --noval
-            self.testloaders = []
+		# Use subset of train data
+		if self.opts.train_size: # if --N: override the __len__ method of the dataset so that only the first N items will be used
+			def train_size(unused): return self.opts.train_size
+			_trainset.__class__.__len__ = train_size
 
-    def train(self):
-        print('Training...')
-        self.solver.train(self.trainloader, *self.testloaders)
+		# Initialize testset
+		if self.opts.do_validation: # Defatult True
+			_testset = dset.Dataset(dataroot, 'test', pairs='annotated')
+			if self.opts.split_zeroshot: # Split testset into seen and zeroshot sets
+				test_sets = zeroshot.Splitter(_trainset, _testset).split()
+				self.testloaders = [dat.DataLoader(data, batch_size=len(data), num_workers=NUM_WORKERS) for data in test_sets]
+			else: # Use a single (unified) testset
+				testdata = dat.DataLoader(_testset, batch_size=len(_testset), num_workers=NUM_WORKERS)
+				self.testloaders = [testdata]
+			if self.opts.val: # Use only x percent of the primary testset as validation (and don't use the rest at this time)
+				dataset = self.testloaders[0].dataset
+				n = int(len(dataset) * self.opts.val)
+				sampler = dat.SubsetRandomSampler(torch.arange(n))
+				self.testloaders[0] = dat.DataLoader(dataset, batch_size=n, sampler=sampler, num_workers=NUM_WORKERS)
+		else: # if --noval
+			self.testloaders = []
+
+	def train(self):
+		print('Training...')
+		self.solver.train(self.trainloader, *self.testloaders)
