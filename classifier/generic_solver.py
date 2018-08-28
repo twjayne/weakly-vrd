@@ -4,26 +4,27 @@ import time
 import os
 import pdb
 
+from .loss_calculator import LossCalculator
 from RecallEvaluator import RecallEvaluator
 
 class GenericSolver:
 	def __init__(self, model, optimizer, **opts):
 		opts = self.opts = {k: v for k, v in opts.items() if v is not None}
-		self.model       = model
-		self.optimizer   = optimizer
-		self.outdir      = opts.get('outdir', None)
-		self.scheduler   = opts.get('scheduler', None)
-		self.cuda        = opts.get('cuda', True)
-		self.supervision = opts.get('supervision', WEAK)
-		self.verbose     = opts.get('verbose', False)
-		self.num_epochs  = opts.get('num_epochs', 9)
-		self.print_every = opts.get('print_every', 20)
-		self.test_every  = opts.get('test_every', 80)
-		self.loss_fn     = opts.get('loss', nn.CrossEntropyLoss())
-		self.dtype       = opts.get('dtype', torch.double)
-		self.save_every  = opts.get('save_every', None)
-		self.save_end    = opts.get('save_end', False)
-		self.recall_every = opts.get('recall_every', None)
+		self.model           = model
+		self.optimizer       = optimizer
+		self.outdir          = opts.get('outdir', None)
+		self.scheduler       = opts.get('scheduler', None)
+		self.cuda            = opts.get('cuda', True)
+		self.supervision     = opts.get('supervision', WEAK)
+		self.verbose         = opts.get('verbose', False)
+		self.num_epochs      = opts.get('num_epochs', 9)
+		self.print_every     = opts.get('print_every', 20)
+		self.test_every      = opts.get('test_every', 80)
+		self.dtype           = opts.get('dtype', torch.double)
+		self.save_every      = opts.get('save_every', None)
+		self.save_end        = opts.get('save_end', False)
+		self.recall_every    = opts.get('recall_every', None)
+		self.loss_calculator = opts.get('loss_calculator', LossCalculator(self.model))
 
 	def init_train(self, trainloader):
 		self.num_iterations = self.num_epochs * len(trainloader)
@@ -35,7 +36,6 @@ class GenericSolver:
 
 		if self.cuda:
 			self.model.cuda()
-			self.loss_fn.cuda()
 
 		self.debug()
 		print('%20s %s' % ('num_epochs', self.num_epochs,))
@@ -61,11 +61,9 @@ class GenericSolver:
 					self.scheduler.step(loss)
 				# Test
 				if self.iteration % self.test_every == 0:
-					if testloader: self._test_primary(testloader)
-					# Test extra testsets
-					if additional_testloaders:
-						for additional in additional_testloaders: self._test(additional)
-				# Compute recall
+					if testloader: self._test(testloader, True)
+					for additional in additional_testloaders: self._test(additional, False)
+				# Calc recall (external) todo: replace with translation
 				if self.recall_every and self.iteration % self.recall_every == 0:
 					recalls = self._calc_recall()
 					print('RECALL\t%s' % (' '.join(recalls.values(),)))
@@ -83,37 +81,17 @@ class GenericSolver:
 		self.optimizer.step()
 		return loss
 
-	def _test_primary(self, testloader):
-		loss = self._test(testloader)
+	def _test(self, testloader, is_primary, do_recall=True):
+		self.model.eval()
+		loss = self.loss_calculator.calc(testloader, do_recall)
+		self._print(loss, testloader.dataset.name or 'TEST')
+		if do_recall: print('\tRECALL %f' % self.loss_calculator.recall)
 		if self.scheduler: self.scheduler.step(loss)
 		if self.opts.get('save_best', False) and self.acc > self.best_acc:
 			self.save_checkpoint('best.pth')
 			self.best_acc = self.acc
 
-	def _test(self, testloader):
-		self.model.eval()
-		total = 0.
-		quotient = 0
-		for batch_i, testbatch in enumerate(testloader):
-			loss = self._calc_loss(testbatch)
-			total += float(loss.cpu().item())
-			quotient += len(testbatch)
-		avg_loss = total / quotient
-		self._print(avg_loss, testloader.dataset.name or 'TEST')
-		return avg_loss
-
-	def _calc_loss(self, batch):
-		batch_X = batch['X']
-		batch_Y = batch['y']
-		if self.cuda:
-			if type(batch_X) is torch.Tensor: batch_X = batch_X.cuda()
-			if type(batch_Y) is torch.Tensor: batch_Y = batch_Y.cuda()
-		self.prediction = self.model(batch_X)
-		correct_predictions = torch.sum( torch.argmax(self.prediction, 1) == batch_Y.transpose(1,0) ).item()
-		self.acc = correct_predictions / float(batch_Y.shape[0])
-		return self.loss_fn( self.prediction, batch_Y.reshape(-1) )
-
-	def _calc_recall(self):
+	def _calc_recall(self, testloader):
 		recalls = self.evaluator.evaluate_recall(self.model, self.supervision, False) # False for language scroes (not using language scores, yet)
 		return recalls
 
@@ -131,7 +109,7 @@ class GenericSolver:
 			}, os.path.join(self.outdir or '', filename))
 
 	def _print(self, loss, dataname='TRAIN'):
-		print('%12s (ep %3d: %5d/%d) loss %e\tacc %.3f' % (dataname, self.epoch, self.iteration, self.num_iterations, loss, self.acc))
+		print('%12s (ep %3d: %5d/%d) loss %e\tacc %.3f' % (dataname, self.epoch, self.iteration, self.num_iterations, loss, self.loss_calculator.acc))
 
 	def debug(self):
 		print('%20s %s' % ('optimizer', str(self.optimizer),))
@@ -142,30 +120,8 @@ class GenericSolver:
 		print('%20s %d' % ('num_epochs', self.num_epochs,))
 		print('%20s %d' % ('print_every', self.print_every,))
 		print('%20s %d' % ('test_every', self.test_every,))
-		print('%20s %s' % ('loss_fn', str(self.loss_fn),))
 		print('%20s %s' % ('dtype', self.dtype,))
 
 
 WEAK = 'weak'
 FULL = 'full'
-
-
-import subprocess
-def get_gpu_memory_map():
-    """Get the current gpu usage.
-
-    Returns
-    -------
-    usage: dict
-        Keys are device ids as integers.
-        Values are memory usage as integers in MB.
-    """
-    result = subprocess.check_output(
-        [
-            'nvidia-smi', '--query-gpu=memory.used',
-            '--format=csv,nounits,noheader'
-        ], encoding='utf-8')
-    # Convert lines into a dictionary
-    gpu_memory = [int(x) for x in result.strip().split('\n')]
-    gpu_memory_map = dict(zip(range(len(gpu_memory)), gpu_memory))
-    return gpu_memory_map

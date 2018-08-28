@@ -15,6 +15,7 @@ import dataset.faster_rcnn as data
 import unrel.unrel_model as unrel
 import classifier.generic_solver as generic_solver
 import classifier.classifier as cls
+from classifier.loss_calculator import LossCalculator
 
 import pdb
 
@@ -23,7 +24,7 @@ parser.remove_option('-N')
 assert parser.has_option('--bs')
 parser.defaults['batch_size'] = 2
 assert parser.has_option('--tbs')
-parser.defaults['test_batch_size'] = 2
+parser.defaults['test_batch_size'] = 1
 assert parser.has_option('--outdir')
 parser.defaults['outdir'] = 'log/e2e/vgg16'
 assert parser.has_option('--geom')
@@ -53,34 +54,12 @@ class Solver(generic_solver.GenericSolver):
 	def _train_step(self, batch):
 		self.model.train()
 		self.optimizer.zero_grad()
-		loss = self._calc_loss(batch)
+		loss = self.loss_calculator.calc(batch)
 		self.loss_history[self.iteration] = float(loss.data)
 		if self.iteration and self.iteration % 50 == 0:
 			loss.backward()
 			self.optimizer.step()
 		return loss
-
-	def _test(self, testloader):
-		self.model.eval()
-		total = 0.
-		quotient = 0
-		for batch_i, testbatch in enumerate(testloader):
-			# mm = get_gpu_memory_map() # todo remove
-			# print('++ MEMORYMAP batch %3d row %3d (#%4d)' % (batch_i, 4, testbatch['im_id'][0]), mm) # todo: remove
-			loss = self._calc_loss(testbatch)
-			total += float(loss.cpu().item())
-			quotient += len(testbatch)
-		avg_loss = total / quotient
-		self._print(avg_loss, testloader.dataset.name or 'TEST')
-		return avg_loss
-
-	def _calc_loss(self, batch): # 'batch' should be one image and all its pairs
-		target = batch['preds'].reshape(-1).cuda()
-		prediction = self.model(batch)
-		correct_predictions = torch.sum( torch.argmax(prediction, 1) == target ).item()
-		self.acc = (correct_predictions / float(target.shape[0]))
-		self.prediction = prediction.data.cpu()
-		return self.loss_fn( prediction, target )
 
 class Runner(shared.Runner):
 	def setup_model(self):
@@ -101,7 +80,8 @@ class Runner(shared.Runner):
 			self.scheduler = None if self.opts.no_scheduler else torch.optim.lr_scheduler.ReduceLROnPlateau(self.optimizer, verbose=True, patience=self.opts.patience)
 		if self.solver == None:
 			print('Building solver...')
-			self.solver = Solver(self.model, self.optimizer, verbose=True, scheduler=self.scheduler, **self.opts.__dict__)
+			loss_calculator = LossCalculator(self.model, input_key=lambda model, batch: model(batch), target_key='preds')
+			self.solver = Solver(self.model, self.optimizer, verbose=True, scheduler=self.scheduler, loss_calculator=loss_calculator, **self.opts.__dict__)
 
 	def setup_data(self):
 		transform = unrel.TRANSFORM

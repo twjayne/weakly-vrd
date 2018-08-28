@@ -32,7 +32,6 @@ parser.add_option('-N', dest='train_size', default=None, type="int")
 parser.add_option('--val', dest='val', default=None, type="float", help="percentage of the primary test set to use (used as validation; remainder is unused)")
 parser.add_option('--noval', action='store_false', default=True, dest='do_validation')
 parser.add_option('--cpu', action='store_false', default=True, dest='cuda')
-parser.add_option('--logdir', dest='logdir', default='log')
 parser.add_option('--log', '--logfile', dest='logfile', default=None)
 parser.add_option('--geom', dest='geometry', default='1000 2000 2000 70')
 parser.add_option('--nosched', dest='no_scheduler', default=True, action='store_true')
@@ -42,7 +41,7 @@ parser.add_option('--print_every', dest='print_every', default=None, type='int')
 parser.add_option('--save', dest='save_every', default=None, type='int')
 parser.add_option('--end-save', dest='save_at_end', default=False, action='store_true')
 parser.add_option('--save-best', dest='save_best', default=False, action='store_true')
-parser.add_option('--outdir', dest='outdir', default=None, help="Used for saving checkpoints, etc.")
+parser.add_option('--outdir', '--dir', '--logdir', dest='outdir', default=None, help="Used for saving checkpoints, etc.")
 parser.add_option('--nosplitzs', dest='split_zeroshot', default=True, action='store_false')
 parser.add_option('--recall', dest='recall_every', default=0, type='int')
 parser.add_option('--load', dest='load', default=None, help='Model or state_dict to load')
@@ -61,8 +60,8 @@ class Runner(object):
 		# Set logger
 		if self.opts.logfile:
 			logger.Logger(self.opts.logfile)
-		elif self.opts.logdir or self.opts.outdir:
-			logger.Logger(self.opts.logdir or self.opts.outdir,
+		elif self.opts.outdir:
+			logger.Logger(self.opts.outdir,
 				'%s N-%d ep-%d lr-%f geom-%s.log' %
 				(datetime.datetime.now().strftime('%Y%m%d%H%M'), opts.train_size or 0, opts.num_epochs, opts.lr, opts.geometry))
 		print(opts)

@@ -60,7 +60,7 @@ class Dataset(torch.utils.data.Dataset):
 	def __iter__(self):
 		return _DataLoaderIter(self)
 
-class FauxDataLoader(object):
+class FauxDataLoader(torch.utils.data.DataLoader):
 	def __init__(self, dataset, batch_size=1):
 		self.dataset = dataset
 		self.batch_size = batch_size
