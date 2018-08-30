@@ -8,8 +8,8 @@ import sys
 import os
 import torch
 import torch.nn as nn
-from torch.utils.data.sampler import SubsetRandomSampler
 from torch.utils.data import DataLoader
+import torch.utils.data.sampler as sampler
 
 import dataset.faster_rcnn as data
 import unrel.unrel_model as unrel
@@ -20,9 +20,9 @@ from classifier.loss_calculator import LossCalculator
 import pdb
 
 parser = shared.parser
-parser.remove_option('-N')
+parser.add_option('--bp_every', dest='backprop_every', default=4, type='int') # Don't backprop on every 'batch'. Instead backprop after multiple batches.
 assert parser.has_option('--bs')
-parser.defaults['batch_size'] = 2
+parser.defaults['batch_size'] = 1
 assert parser.has_option('--tbs')
 parser.defaults['test_batch_size'] = 1
 assert parser.has_option('--outdir')
@@ -30,7 +30,7 @@ parser.defaults['outdir'] = 'log/e2e/vgg16'
 assert parser.has_option('--geom')
 parser.defaults['geom'] = '1400 1024 700 71'
 assert parser.has_option('--test_every')
-parser.defaults['test_every'] = 250
+parser.defaults['test_every'] = 2048
 
 class Model(unrel.Model):
 	def __init__(self, n_vis_features, *args, **kwargs):
@@ -51,13 +51,23 @@ class Model(unrel.Model):
 
 
 class Solver(generic_solver.GenericSolver):
+	def __init__(self, *args, **kwargs):
+		super(Solver, self).__init__(*args, **kwargs)
+		self.loss = 0
+		self.pairs_n = 0
+		self.verbose = False
+
 	def _train_step(self, batch):
 		self.model.train()
 		self.optimizer.zero_grad()
 		loss = self.loss_calculator.calc(batch)
-		self.loss_history[self.iteration] = float(loss.data)
-		if self.iteration and self.iteration % 50 == 0:
-			loss.backward()
+		self.pairs_n += batch['preds'].shape[0]
+		self.loss = self.loss + loss
+		if self.iteration and self.iteration % r.opts.backprop_every == 0: # If this is not the first iteration and we have enough iterations to merit a backprop
+			self.loss.backward()
+			self._print(self.loss / self.pairs_n, 'ACC_TRAIN')
+			self.pairs_n = 0
+			self.loss = 0
 			self.optimizer.step()
 		return loss
 
@@ -77,7 +87,7 @@ class Runner(shared.Runner):
 			self.optimizer = torch.optim.Adam(self.model.parameters(), lr=self.opts.lr)
 		if self.scheduler == None:
 			print('Building scheduler...')
-			self.scheduler = None if self.opts.no_scheduler else torch.optim.lr_scheduler.ReduceLROnPlateau(self.optimizer, verbose=True, patience=self.opts.patience)
+			self.scheduler = None if self.opts.no_scheduler else torch.optim.lr_scheduler.MultiStepLR(self.optimizer, [x * self.opts.backprop_every for x in [35, 75, 120, 200, 400, 600, 800]], 0.5)
 		if self.solver == None:
 			print('Building solver...')
 			loss_calculator = LossCalculator(self.model, input_key=lambda model, batch: model(batch), target_key='preds')
@@ -87,10 +97,19 @@ class Runner(shared.Runner):
 		transform = unrel.TRANSFORM
 		# Initialize trainset
 		self.trainset = data.Dataset(split='train', pairs='annotated', transform=transform)
-		self.trainloader = data.FauxDataLoader(self.trainset, self.opts.batch_size)
+		if self.opts.train_size:
+			print('Using subset of %d from train_set' % self.opts.train_size)
+			batch_sampler = sampler.SequentialSampler(range(self.opts.train_size))
+		else:
+			batch_sampler = None
+		self.trainloader = data.FauxDataLoader(self.trainset, sampler=batch_sampler, batch_size=self.opts.batch_size)
 		# Initialize testset
-		self.testset = data.Dataset(split='test', pairs='annotated', transform=transform)
-		self.testloaders = [data.FauxDataLoader(self.testset, self.opts.test_batch_size)]
+		if self.opts.do_validation:
+			self.testset = data.Dataset(split='test', pairs='annotated', transform=transform)
+			self.testloaders = [data.FauxDataLoader(self.testset, batch_size=self.opts.test_batch_size)]
+		else:
+			print('No testset')
+			self.testloaders = []
 
 if __name__ == '__main__':
 	r = Runner()

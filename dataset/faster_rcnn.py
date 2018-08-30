@@ -1,6 +1,7 @@
 import torch
 assert torch.__version__.startswith('0.4'), 'wanted version 0.4, got %s' % torch.__version__
 import torch.utils.data
+import torch.utils.data.sampler as torchsampler
 import numpy as np
 import scipy.io
 import os
@@ -60,41 +61,83 @@ class Dataset(torch.utils.data.Dataset):
 	def __iter__(self):
 		return _DataLoaderIter(self)
 
+# Behaves like a dataloader but doesn't stack all fields (because some of them, such as images, may be of differing dimensions)
 class FauxDataLoader(torch.utils.data.DataLoader):
-	def __init__(self, dataset, batch_size=1):
-		self.dataset = dataset
-		self.batch_size = batch_size
-		self.cur = 0
+	def __init__(self, dataset, **kwargs):
+		self.dataset    = dataset
+		self.sampler    = self._init_sampler(**kwargs)
+		self.batch_size = self.sampler.batch_size
+		self.iterator   = iter(self.sampler)
 	def __iter__(self):
 		return self
 	def __len__(self):
-		return int(np.ceil(len(self.dataset) / float(self.batch_size)))
+		return len([item for batch in self.sampler for item in batch])
 	def __next__(self):
-		remaining = len(self.dataset) - self.cur - 1
-		interval  = min(remaining, self.batch_size)
-		if interval == 0:
-			self.cur = 0
+		# Get batch
+		try:
+			batch = next(self.iterator)
+		except StopIteration:
+			self.iterator = iter(self.sampler)
 			raise StopIteration
-		else:
-			selection = [self.dataset[i] for i in range(self.cur, self.cur+interval)]
-			self.cur += interval
-			return {
-				'im_id':    [d['imid'] for d in selection],
-				'image':   [d['image'] for d in selection],
-				'bbs':     [d['bbs'] for d in selection],
-				'preds':   torch.cat([d['preds'] for d in selection]),
-				'spatial': torch.cat([d['spatial'] for d in selection]),
-				'N':       len(selection),
-			}
+		if isinstance(batch[0], int):
+			batch = [self.dataset[i] for i in batch]
+		# Return dict
+		return {
+			'im_id':    [d['imid'] for d in batch],
+			'image':   [d['image'] for d in batch],
+			'bbs':     [d['bbs'] for d in batch],
+			'preds':   torch.cat([d['preds'] for d in batch]),
+			'spatial': torch.cat([d['spatial'] for d in batch]),
+			'N':       len(batch),
+		}
+	def _init_sampler(self, **kwargs):
+		sampler = kwargs.get('sampler')
+		batch_size  = kwargs.get('batch_size', 1)
+		drop_last   = kwargs.get('drop_last', False)
+		if isinstance(sampler, torchsampler.BatchSampler):
+			return sampler
+		if sampler == None:
+			sampler = torchsampler.RandomSampler(self.dataset)
+		elif not isinstance(sampler, torchsampler.Sampler):
+			sampler = torchsampler.RandomSampler(sampler)
+		return torchsampler.BatchSampler(sampler, batch_size, drop_last)
 
+# Test this module
 if __name__ == '__main__':
+	N_TESTS = 4
+	passed = 0
 	dataset = Dataset(transform=unrel.TRANSFORM)
-	dataloader = FauxDataLoader(dataset, 2)
-	count = 0
-	for batch in dataloader:
+	# Test on a subset sampler
+	batch_sampler = torchsampler.SequentialSampler(range(14))
+	dataloader = FauxDataLoader(dataset, sampler=batch_sampler)
+	for batch_i, batch in enumerate(dataloader):
 		assert isinstance(batch['image'], list)
 		for image in batch['image']:
 			assert isinstance(image, torch.Tensor)
-			count += 1
-		print('dataset count %3d / %3d' % (dataloader.cur, len(dataset)))
-	print('OK')
+		print('dataset count %3d / %3d' % ((1+batch_i) * dataloader.sampler.batch_size, len(dataloader)))
+	passed += 1; print('OK %d/%d' % (passed, N_TESTS))
+	# Test on a batched subset sampler
+	batch_sampler = torchsampler.BatchSampler(torchsampler.SequentialSampler(range(14)), 3, False)
+	dataloader = FauxDataLoader(dataset, sampler=batch_sampler)
+	for batch_i, batch in enumerate(dataloader):
+		assert isinstance(batch['image'], list)
+		for image in batch['image']:
+			assert isinstance(image, torch.Tensor)
+		print('dataset count %3d / %3d' % ((1+batch_i) * dataloader.sampler.batch_size, len(dataloader)))
+	passed += 1; print('OK %d/%d' % (passed, N_TESTS))
+	# Test second time on same dataloader to ensure that reset works
+	for batch_i, batch in enumerate(dataloader):
+		assert isinstance(batch['image'], list)
+		for image in batch['image']:
+			assert isinstance(image, torch.Tensor)
+		print('dataset count %3d / %3d' % ((1+batch_i) * dataloader.sampler.batch_size, len(dataloader)))
+	passed += 1; print('OK %d/%d' % (passed, N_TESTS))
+	# Test without supplying sampler
+	dataloader = FauxDataLoader(dataset, batch_size=2)
+	for batch_i, batch in enumerate(dataloader):
+		assert isinstance(batch['image'], list)
+		for image in batch['image']:
+			assert isinstance(image, torch.Tensor)
+		if batch_i % 50 == 0:
+			print('dataset count %3d / %3d' % ((1+batch_i) * dataloader.sampler.batch_size, len(dataloader)))
+	passed += 1; print('OK %d/%d' % (passed, N_TESTS))

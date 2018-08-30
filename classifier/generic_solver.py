@@ -47,8 +47,12 @@ class GenericSolver:
 	
 	# @arg trainloader should be a Dataloader
 	# @arg testloaders should be a Dataloaders
-	def train(self, trainloader, testloader, *additional_testloaders):
+	def train(self, trainloader, *testloaders):
+		# Init dataloaders
 		self.init_train(trainloader)
+		testloader = testloaders[0] if len(testloaders) else None
+		additional_testloaders = testloaders[1:]
+		# Iterate
 		for self.epoch in range(self.num_epochs):
 			for batch_i, batch in enumerate(trainloader):
 				# Train
@@ -58,7 +62,7 @@ class GenericSolver:
 				if self.verbose and batch_i % self.print_every == 0:
 					self._print(loss, 'TRAIN')
 				if self.scheduler and testloader is None:
-					self.scheduler.step(loss)
+					self.scheduler.step(loss.item())
 				# Test
 				if self.iteration % self.test_every == 0:
 					if testloader: self._test(testloader, True)
@@ -75,7 +79,7 @@ class GenericSolver:
 	def _train_step(self, batch):
 		self.model.train()
 		self.optimizer.zero_grad()
-		loss = self._calc_loss(batch)
+		loss = self.loss_calculator.calc(batch)
 		loss.backward()
 		self.loss_history[self.iteration] = float(loss.data)
 		self.optimizer.step()
@@ -84,9 +88,10 @@ class GenericSolver:
 	def _test(self, testloader, is_primary, do_recall=True):
 		self.model.eval()
 		loss = self.loss_calculator.calc(testloader, do_recall)
-		self._print(loss, testloader.dataset.name or 'TEST')
-		if do_recall: print('\tRECALL %f' % self.loss_calculator.recall)
-		if self.scheduler: self.scheduler.step(loss)
+		extra_strings = []
+		if do_recall: extra_strings.append('rec %.2f' % self.loss_calculator.recall)
+		self._print(loss, testloader.dataset.name or 'TEST', *extra_strings)
+		if self.scheduler: self.scheduler.step(loss.item())
 		if self.opts.get('save_best', False) and self.acc > self.best_acc:
 			self.save_checkpoint('best.pth')
 			self.best_acc = self.acc
@@ -104,15 +109,20 @@ class GenericSolver:
 		torch.save({
 			'epoch': self.epoch,
 			'iteration': self.iteration,
+			'model_type': str(type(self.model)),
 			'state_dict': self.model.state_dict(),
 			'optimizer': self.optimizer.state_dict(),
+			'optimizer_type': str(type(self.optimizer)),
 			}, os.path.join(self.outdir or '', filename))
 
-	def _print(self, loss, dataname='TRAIN'):
-		print('%12s (ep %3d: %5d/%d) loss %e\tacc %.3f' % (dataname, self.epoch, self.iteration, self.num_iterations, loss, self.loss_calculator.acc))
+	def _print(self, loss, dataname='TRAIN', *extra_strings):
+		text = '%12s (ep %3d: %5d/%d) loss %e\tacc %.3f' % (dataname, self.epoch, self.iteration, self.num_iterations, loss, self.loss_calculator.acc)
+		for string in extra_strings: text += '\t%s' % string
+		print(text)
 
 	def debug(self):
 		print('%20s %s' % ('optimizer', str(self.optimizer),))
+		print('%20s %s' % ('scheduler', str(self.scheduler.state_dict() if self.scheduler else None),))
 		print('%20s %s' % ('model', str(self.model),))
 		print('%20s %s' % ('cuda', self.cuda,))
 		print('%20s %s' % ('supervision', self.supervision,))

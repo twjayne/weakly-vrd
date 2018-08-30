@@ -34,7 +34,7 @@ parser.add_option('--noval', action='store_false', default=True, dest='do_valida
 parser.add_option('--cpu', action='store_false', default=True, dest='cuda')
 parser.add_option('--log', '--logfile', dest='logfile', default=None)
 parser.add_option('--geom', dest='geometry', default='1000 2000 2000 70')
-parser.add_option('--nosched', dest='no_scheduler', default=True, action='store_true')
+parser.add_option('--sched', dest='no_scheduler', default=True, action='store_false')
 parser.add_option('--patience', dest='patience', default=10, type="int")
 parser.add_option('--test_every', dest='test_every', default=None, type='int')
 parser.add_option('--print_every', dest='print_every', default=None, type='int')

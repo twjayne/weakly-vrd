@@ -6,6 +6,9 @@ import util.gpu
 
 import pdb
 
+DTYPE = torch.float32
+DO_CUDA = True
+
 class LossCalculator(object):
 	# @arg input_key can be a lambda or a dictionary key
 	def __init__(self, model, **opts):
@@ -14,7 +17,7 @@ class LossCalculator(object):
 		self.target_key = opts.get('target_key', 'y')
 		self.loss_fn    = opts.get('loss', nn.CrossEntropyLoss())
 		self.recall_x   = opts.get('recall', 50)
-		self.loss_fn.cuda()
+		if DO_CUDA: self.loss_fn.cuda()
 
 	def calc(self, data, do_recall=False):
 		if isinstance(data, dict):
