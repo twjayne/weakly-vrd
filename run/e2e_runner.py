@@ -28,7 +28,7 @@ parser.defaults['test_batch_size'] = 1
 assert parser.has_option('--outdir')
 parser.defaults['outdir'] = 'log/e2e/vgg16'
 assert parser.has_option('--geom')
-parser.defaults['geom'] = '1400 1024 700 71'
+parser.defaults['geometry'] = '1400 600 300 71'
 assert parser.has_option('--test_every')
 parser.defaults['test_every'] = 2048
 
@@ -36,7 +36,8 @@ class Model(unrel.Model):
 	def __init__(self, n_vis_features, *args, **kwargs):
 		super(Model, self).__init__(*args, **kwargs)
 		self.classifier = nn.Sequential(*list(self.classifier.children())[:-1], nn.Linear(4096, n_vis_features))
-		self.predicate_classifier = cls.sequential( [1400,1024,700,71], batchnorm=False )
+		geom = [ int(x) for x in kwargs['opts'].geometry.split() ]
+		self.predicate_classifier = cls.sequential( geom, batchnorm=False )
 
 	def forward(self, batch):
 		appearance_features = super(Model, self).forward(batch)
@@ -63,7 +64,7 @@ class Solver(generic_solver.GenericSolver):
 		loss = self.loss_calculator.calc(batch)
 		self.pairs_n += batch['preds'].shape[0]
 		self.loss = self.loss + loss
-		if self.iteration and self.iteration % r.opts.backprop_every == 0: # If this is not the first iteration and we have enough iterations to merit a backprop
+		if self.iteration and self.iteration % self.opts.get('backprop_every') == 0: # If this is not the first iteration and we have enough iterations to merit a backprop
 			self.loss.backward()
 			self._print(self.loss / self.pairs_n, 'ACC_TRAIN')
 			self.pairs_n = 0
@@ -78,20 +79,20 @@ class Runner(shared.Runner):
 
 	def _build_model(self, n_vis_features=500):
 		print('Building model')
-		return Model(n_vis_features)
+		return Model(n_vis_features, opts=self.opts)
 
-	def setup_opt(self):
+	def setup_opt(self, optimizer_lambda=None, scheduler_lambda=None, solver_lambda=None):
 		# Define optimizer, scheduler, solver
 		if self.optimizer == None:
 			print('Building optimizer...')
-			self.optimizer = torch.optim.Adam(self.model.parameters(), lr=self.opts.lr)
-		if self.scheduler == None:
+			self.optimizer = optimizer(self.model.parameters(), self.opts) if optimizer_lambda else torch.optim.Adam(self.model.parameters(), lr=self.opts.lr)
+		if self.scheduler == None and not self.opts.no_scheduler:
 			print('Building scheduler...')
-			self.scheduler = None if self.opts.no_scheduler else torch.optim.lr_scheduler.MultiStepLR(self.optimizer, [x * self.opts.backprop_every for x in [35, 75, 120, 200, 400, 600, 800]], 0.5)
+			self.scheduler = scheduler_lambda(self.optimizer) if scheduler_lambda else torch.optim.lr_scheduler.MultiStepLR(self.optimizer, [x * self.opts.backprop_every for x in [35, 75, 120, 200, 400, 600, 800]], 0.5)
 		if self.solver == None:
 			print('Building solver...')
 			loss_calculator = LossCalculator(self.model, input_key=lambda model, batch: model(batch), target_key='preds')
-			self.solver = Solver(self.model, self.optimizer, verbose=True, scheduler=self.scheduler, loss_calculator=loss_calculator, **self.opts.__dict__)
+			self.solver = solver_lambda(self.model, self.optmizer, self.scheduler, loss_calculator, self.opts.__dict__) if solver_lambda else Solver(self.model, self.optimizer, verbose=True, scheduler=self.scheduler, loss_calculator=loss_calculator, **self.opts.__dict__)
 
 	def setup_data(self):
 		transform = unrel.TRANSFORM
