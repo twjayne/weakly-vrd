@@ -16,7 +16,6 @@ class LossCalculator(object):
 		self.input_key  = opts.get('input_key', 'X')
 		self.target_key = opts.get('target_key', 'y')
 		self.loss_fn    = opts.get('loss', nn.CrossEntropyLoss())
-		self.recall_x   = opts.get('recall', 50)
 		if DO_CUDA: self.loss_fn.cuda()
 
 	def calc(self, data, do_recall=False):
@@ -33,9 +32,9 @@ class LossCalculator(object):
 		quotient = 0.
 		n_preds = 0
 		if do_recall:
-			confidences = []
-			targets = []
-			predicted_classes = []
+			self.targets = []
+			self.confidences = []
+			self.predicted_classes = []
 		for i, batch in enumerate(dataloader):
 			loss = self._calc_on_batch(batch).item()
 			assert isinstance(loss, float)
@@ -47,21 +46,23 @@ class LossCalculator(object):
 				print('test batch %5d completed. total pairs %8d' % (i, n_preds), mm)
 			# Compute intermediates for recall
 			if do_recall:
-				targets.append(self.target.cpu())
+				self.targets.append(self.target.cpu())
 				cons, pcls = self.prediction.max(1) # Get the top-1 predicted class and its confidence
-				confidences.append(torch.Tensor([x.item() for x in cons.cpu()])) # kludge. for some reason, I get a memory leak with `# confidences.append(cons.cpu())`
-				predicted_classes.append(pcls.cpu())
+				self.confidences.append(torch.Tensor([x.item() for x in cons.cpu()])) # kludge. for some reason, I get a memory leak with `# confidences.append(cons.cpu())`
+				self.predicted_classes.append(pcls.cpu())
 		avg_loss = total_loss / quotient
 		if do_recall:
 			# Collect stored intermediates
-			targets = torch.cat(targets)
-			confidences = torch.cat(confidences)
-			predicted_classes = torch.cat(predicted_classes)
-			# Compute Recall@x
-			_,reversed_order = confidences.sort()
-			correct_predictions = predicted_classes[reversed_order][-self.recall_x:] == targets[reversed_order][-self.recall_x:]
-			self.recall = correct_predictions.sum().item() / float(self.recall_x)
+			self.targets = torch.cat(self.targets)
+			self.confidences = torch.cat(self.confidences)
+			self.predicted_classes = torch.cat(self.predicted_classes)
 		return avg_loss
+
+	# Compute Recall@x
+	def recall(self, k):
+		_,reversed_order = self.confidences.sort()
+		correct_predictions = self.predicted_classes[reversed_order][-k:] == self.targets[reversed_order][-k:]
+		return correct_predictions.sum().item() / float(k)
 
 	# Set self.target, self.prediction, self.acc
 	def _calc_on_batch(self, batch):
