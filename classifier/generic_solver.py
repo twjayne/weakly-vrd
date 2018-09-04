@@ -89,7 +89,7 @@ class GenericSolver:
 		self.model.eval()
 		loss = self.loss_calculator.calc(testloader, do_recall)
 		extra_strings = []
-		if do_recall: extra_strings.append('rec %.2f %.2f' % self.loss_calculator.recall(50), self.loss_calculator.recall(100))
+		if do_recall: extra_strings.append( 'rec %.2f %.2f' % (self.loss_calculator.recall(50), self.loss_calculator.recall(100),) )
 		self._print(loss, testloader.dataset.name or 'TEST', *extra_strings)
 		if self.scheduler: self.scheduler.step(loss.item())
 		if self.opts.get('save_best', False) and self.acc > self.best_acc:
