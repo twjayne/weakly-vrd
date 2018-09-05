@@ -27,6 +27,7 @@ import unrel.unrel_data as unrel
 
 # Import faster-rcnn modules
 from model.roi_pooling.modules.roi_pool import _RoIPooling
+from model.roi_align.modules.roi_align import RoIAlignAvg
 from model.utils.config import cfg
 
 import pdb
@@ -34,11 +35,14 @@ import pdb
 class Model(nn.Module):
 	def __init__(self, features=None, classifier=None, **kwargs):
 		super(Model, self).__init__()
-		self.verbose = kwargs.get('verbose', False)
+		self.verbose  = kwargs.get('verbose', False)
+		self.roi_mode = kwargs.get('mode', MODE_ALIGN)
 		curdir = os.path.realpath(os.path.join(__file__, '..'))
 		self._init_features(features or os.path.join(curdir, 'conv.prototxt.statedict.pth'))
 		self._init_classifier(classifier or os.path.join(curdir, 'linear.prototxt.statedict.pth'))
-		self.RoIPooling = _RoIPooling(cfg.POOLING_SIZE, cfg.POOLING_SIZE, 1.0/32.0) # This needs to be the ratio of imdata.shape to the shape of the feature map at the end of the convolutional layers. This is architecture-dependent, not image-dependent (though a pixel here or there can cause some small shift in the true ratio).
+		spatial_scale   = kwargs.get('scale', 1.0/32.0)
+		self.RoIPooling = _RoIPooling(cfg.POOLING_SIZE, cfg.POOLING_SIZE, spatial_scale) # This needs to be the ratio of imdata.shape to the shape of the feature map at the end of the convolutional layers. This is architecture-dependent, not image-dependent (though a pixel here or there can cause some small shift in the true ratio).
+		self.RoIAlign   = RoIAlignAvg(cfg.POOLING_SIZE, cfg.POOLING_SIZE, spatial_scale)
 
 	def forward(self, batch):
 		# Extract features
@@ -56,7 +60,12 @@ class Model(nn.Module):
 		batch_index = torch.zeros(bbs.shape[0],1)
 		tensors = ( self._do_cuda(batch_index), self._do_cuda(bbs).float() )
 		boxes_plus = torch.cat(tensors, 1)
-		return self.RoIPooling(features, boxes_plus)
+		if self.roi_mode == MODE_ALIGN:
+			return self.RoIAlign(features, boxes_plus)
+		elif self.roi_mode == MODE_POOL:
+			return self.RoIPooling(features, boxes_plus)
+		else:
+			raise Exception('Illegal mode %s' % (self.roi_mode,))
 
 	def _load_state_dict(self, path_or_dict):
 		return path_or_dict if isinstance(path_or_dict, dict) else torch.load(path_or_dict)
@@ -104,6 +113,9 @@ class Model(nn.Module):
 		if self.verbose: print(features)
 		self.features = features
 
+MODE_ALIGN = 'align'
+MODE_POOL  = 'pool'
+MODE_CROP  = 'crop'
 
 MEAN = torch.FloatTensor(list(reversed([123.68, 116.779, 103.939]))).view(1,3,1,1) # Reversed b/c caffe does BGR
 BGR_indices = torch.LongTensor((2,1,0))
