@@ -54,22 +54,22 @@ class Model(unrel.Model):
 class Solver(generic_solver.GenericSolver):
 	def __init__(self, *args, **kwargs):
 		super(Solver, self).__init__(*args, **kwargs)
-		self.loss = 0
-		self.pairs_n = 0
 		self.verbose = False
+		self.optimizer.zero_grad()
 
 	def _train_step(self, batch):
 		self.model.train()
-		self.optimizer.zero_grad()
-		loss = self.loss_calculator.calc(batch)
-		self.pairs_n += batch['preds'].shape[0]
-		self.loss = self.loss + loss
+		loss = self.train_loss(batch)
+		loss.backward()
 		if self.iteration and self.iteration % self.opts.get('backprop_every') == 0: # If this is not the first iteration and we have enough iterations to merit a backprop
-			self.loss.backward()
-			self._print(self.loss / self.pairs_n, 'ACC_TRAIN')
+			self.optimizer.step()
+			self.optimizer.zero_grad()
 			self.pairs_n = 0
 			self.loss = 0
-			self.optimizer.step()
+		if self.iteration % self.print_every == 0:
+			self._print('TRAIN_BCH', self.train_loss.end_batch())
+		if self.scheduler and testloader is None:
+			self.scheduler.step(loss.item())
 		return loss
 
 class Runner(shared.Runner):
@@ -91,8 +91,9 @@ class Runner(shared.Runner):
 			self.scheduler = scheduler_lambda(self.optimizer) if scheduler_lambda else torch.optim.lr_scheduler.MultiStepLR(self.optimizer, [x * self.opts.backprop_every for x in [35, 75, 120, 200, 400, 600, 800]], 0.5)
 		if self.solver == None:
 			print('Building solver...')
-			loss_calculator = LossCalculator(self.model, input_key=lambda model, batch: model(batch), target_key='preds')
-			self.solver = solver_lambda(self.model, self.optmizer, self.scheduler, loss_calculator, self.opts.__dict__) if solver_lambda else Solver(self.model, self.optimizer, verbose=True, scheduler=self.scheduler, loss_calculator=loss_calculator, **self.opts.__dict__)
+			train_loss = LossCalculator(self.model, input_key=lambda model, batch: model(batch), target_key='preds')
+			test_loss = LossCalculator(self.model, input_key=lambda model, batch: model(batch), target_key='preds')
+			self.solver = solver_lambda(self.model, self.optmizer, self.scheduler, loss_calculator, self.opts.__dict__) if solver_lambda else Solver(self.model, self.optimizer, verbose=True, scheduler=self.scheduler, train_loss=train_loss, test_loss=test_loss, **self.opts.__dict__)
 
 	def setup_data(self):
 		transform = unrel.TRANSFORM

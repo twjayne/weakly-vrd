@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 import time
 import os
+import sys
 import pdb
 
 from .loss_calculator import LossCalculator
@@ -24,15 +25,12 @@ class GenericSolver:
 		self.save_every      = opts.get('save_every', None)
 		self.save_end        = opts.get('save_end', False)
 		self.recall_every    = opts.get('recall_every', None)
-		self.loss_calculator = opts.get('loss_calculator', LossCalculator(self.model))
+		self.train_loss      = opts.get('train_loss', LossCalculator(self.model))
+		self.test_loss       = opts.get('test_loss', LossCalculator(self.model))
 
 	def init_train(self, trainloader):
 		self.num_iterations = self.num_epochs * len(trainloader)
 		self.loss_history = torch.Tensor(self.num_iterations)
-
-		# initialize evaluator
-		if self.recall_every:
-			self.evaluator = RecallEvaluator()
 
 		if self.cuda:
 			self.model.cuda()
@@ -55,50 +53,40 @@ class GenericSolver:
 		# Iterate
 		for self.epoch in range(self.num_epochs):
 			for batch_i, batch in enumerate(trainloader):
+				self.iteration += 1
 				# Train
 				tic = time.time()
-				loss = self._train_step(batch)
+				self._train_step(batch)
 				toc = (time.time() - tic) / (len(batch['y']) if 'y' in batch else batch['N'])
-				if self.verbose and batch_i % self.print_every == 0:
-					self._print(loss, 'TRAIN')
-				if self.scheduler and testloader is None:
-					self.scheduler.step(loss.item())
 				# Test
 				if self.iteration % self.test_every == 0:
 					if testloader: self._test(testloader, True)
 					for additional in additional_testloaders: self._test(additional, False)
-				# Calc recall (external) todo: replace with translation
-				if self.recall_every and self.iteration % self.recall_every == 0:
-					recalls = self._calc_recall()
-					print('RECALL\t%s' % (' '.join(recalls.values(),)))
 				# Save model
 				if self.save_every and self.iteration % self.save_every == 0:
 					self.save_checkpoint('iter-%d-acc-%f.pth.tar' % (self.iteration, self.acc))
-				self.iteration += 1
+			self._print('TRAIN_EP', self.train_loss.end_epoch())
 	
 	def _train_step(self, batch):
 		self.model.train()
 		self.optimizer.zero_grad()
-		loss = self.loss_calculator.calc(batch)
+		loss = self.train_loss(batch)
 		loss.backward()
+		if self.verbose and self.iteration % self.print_every == 0:
+			self._print('TRAIN_BCH', train_loss.batch_stats.compute())
+		if self.scheduler and testloader is None:
+			self.scheduler.step(loss.item())
 		self.loss_history[self.iteration] = float(loss.data)
 		self.optimizer.step()
-		return loss
 
-	def _test(self, testloader, is_primary, do_recall=True):
+	def _test(self, testloader, is_primary):
 		self.model.eval()
-		loss = self.loss_calculator.calc(testloader, do_recall)
-		extra_strings = []
-		if do_recall: extra_strings.append( 'rec %.2f %.2f' % (self.loss_calculator.recall(50), self.loss_calculator.recall(100),) )
-		self._print(loss, testloader.dataset.name or 'TEST', *extra_strings)
-		if self.scheduler: self.scheduler.step(loss.item())
+		stats = self.test_loss(testloader)
+		self._print(testloader.dataset.name or 'TEST', stats)
+		if self.scheduler: self.scheduler.step(stats.loss)
 		if self.opts.get('save_best', False) and self.acc > self.best_acc:
 			self.save_checkpoint('best.pth')
 			self.best_acc = self.acc
-
-	def _calc_recall(self, testloader):
-		recalls = self.evaluator.evaluate_recall(self.model, self.supervision, False) # False for language scroes (not using language scores, yet)
-		return recalls
 
 	def _calc_recall_matlab(self):
 		recalls = self.evaluator.recall_from_matlab(self.model)
@@ -115,10 +103,13 @@ class GenericSolver:
 			'optimizer_type': str(type(self.optimizer)),
 			}, os.path.join(self.outdir or '', filename))
 
-	def _print(self, loss, dataname='TRAIN', *extra_strings):
-		text = '%12s (ep %3d: %5d/%d) loss %e\tacc %.3f' % (dataname, self.epoch, self.iteration, self.num_iterations, loss, self.loss_calculator.acc)
-		for string in extra_strings: text += '\t%s' % string
-		print(text)
+	def _print(self, dataname, loss_calculator):
+		sys.stdout.write('%12s (ep %3d: %5d/%d)' % (dataname, self.epoch, self.iteration, self.num_iterations))
+		sys.stdout.write(' : loss %e : acc %.3f' % (loss_calculator.loss, loss_calculator.acc))
+		for tensor in (loss_calculator.rec, loss_calculator.rec2, loss_calculator.unrel_recall):
+			sys.stdout.write(' : R@')
+			for rec in tensor: sys.stdout.write(' %.3f' % rec)
+		print()
 
 	def debug(self):
 		print('%20s %s' % ('optimizer', str(self.optimizer),))
