@@ -75,8 +75,13 @@ class _Fetcher(object):
 	def spatial(self, im_id, rel_ids=None):
 		spatial_features_fpath = os.path.join(self.spatial_features_dir, '%d.mat' % im_id)
 		spatial = scipy.io.loadmat(spatial_features_fpath)['spatial']
-		if rel_ids: assert np.array_equal(rel_ids, spatial[:,0].astype(np.int))
-		return torch.from_numpy(spatial[:,1:])
+		if rel_ids:
+			selected_pairs = [i for i in range(spatial.shape[0]) if spatial[i,0] in rel_ids]
+			spatial = spatial[selected_pairs,:] # Select rows for given pair (aka rel)
+			assert len(rel_ids) == spatial.shape[0]
+			return torch.from_numpy(spatial[:,1:])
+		else:
+			return torch.from_numpy(spatial[:,1:])
 
 	def bbs(self, im_id):
 		bbs = [ent.bb() for ent in self.entities(im_id)]
