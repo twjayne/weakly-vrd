@@ -71,6 +71,7 @@ class RecallEvaluator(object):
         # scores = np.load('predictions1.npy')
         candidates, groundtruth = self.format_testdata_recall(pairs, scores, annotations)
         recall_predicate, _ = self.top_recall_Relationship(self.Nre, candidates, groundtruth)
+        return recall_predicate
         self.candidatespairs = 'Lu-candidates'
         self.use_objectscores = True
         # print(f'Phrase/Relationship Detection...')
@@ -366,11 +367,11 @@ class RecallEvaluator(object):
         precision = tp / (fp + tp)
 
         top_recall = recall[:,-1][0]
-        top_recall = np.round(top_recall*100,decimals=1)
+        top_recall = top_recall
         ap = self.VOCap(recall, precision)
-        ap = np.round(ap*100, decimals=1)
+        ap = ap*100
 
-        return str(top_recall), str(ap)
+        return top_recall, ap
 
     def VOCap(self, rec, prec):
         mrec = np.hstack((np.hstack((np.zeros((1,1)), rec)), np.ones((1,1))))
@@ -460,7 +461,7 @@ class RecallEvaluator(object):
         pairs = self.load_candidates(self.candidatespairs)
 
         testloader = self.create_testloader()
-        prediction = self.calc_scores(testloader)
+        prediction = self.prediction
         N, C = prediction.shape
 
         if self.use_languagescores:

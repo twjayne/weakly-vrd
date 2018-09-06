@@ -39,7 +39,6 @@ REGEXES = [
 ]
 
 
-
 class Plotter(object):
 	def __init__(self, key, *fpaths):
 		self.key = key
@@ -47,14 +46,16 @@ class Plotter(object):
 		for fpath in fpaths:
 			plt.figure(fpath)
 			self.ax = plt.subplot()
-			plt.title(fpath)
+			plt.suptitle(key)
+			plt.title('%s-%s' % (fpath, key), fontsize=8)
 			self._line(fpath if type(fpath) is str else fpath[0])
 			self.ax.legend(self.labels)
 	def _line(self, fpath):
+		print('FPATH', fpath)
 		for regex in REGEXES:
-			print('== tring regex %s' % (regex[0].pattern))
+			print('== trying regex %s' % (regex[0].pattern))
 			dat = np.fromregex(fpath, *regex)
-			if dat != None: break
+			if len(dat): break
 		if dat == None: raise Exception('no matches for any regex')
 		srcs = set(dat['name'])
 		subs = {src: dat[dat['name'] == src] for src in srcs}

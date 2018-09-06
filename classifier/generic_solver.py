@@ -1,12 +1,12 @@
 import torch
 import torch.nn as nn
 import time
+import datetime
 import os
 import sys
 import pdb
 
 from .loss_calculator import LossCalculator
-from RecallEvaluator import RecallEvaluator
 
 class GenericSolver:
 	def __init__(self, model, optimizer, **opts):
@@ -23,6 +23,7 @@ class GenericSolver:
 		self.test_every      = opts.get('test_every', 80)
 		self.dtype           = opts.get('dtype', torch.double)
 		self.save_every      = opts.get('save_every', None)
+		self.save_best       = opts.get('save_best', True)
 		self.save_end        = opts.get('save_end', False)
 		self.recall_every    = opts.get('recall_every', None)
 		self.train_loss      = opts.get('train_loss', LossCalculator(self.model))
@@ -40,7 +41,7 @@ class GenericSolver:
 		print('%20s %s' % ('num_batches', len(trainloader),))
 		print('%20s %s' % ('batch_size', trainloader.batch_size,))
 
-		self.best_acc = 0
+		self.best_val = 0
 		self.iteration = 0
 	
 	# @arg trainloader should be a Dataloader
@@ -52,12 +53,11 @@ class GenericSolver:
 		additional_testloaders = testloaders[1:]
 		# Iterate
 		for self.epoch in range(self.num_epochs):
+			tic = time.time()
 			for batch_i, batch in enumerate(trainloader):
 				self.iteration += 1
 				# Train
-				tic = time.time()
 				self._train_step(batch)
-				toc = (time.time() - tic) / (len(batch['y']) if 'y' in batch else batch['N'])
 				# Test
 				if self.iteration % self.test_every == 0:
 					if testloader: self._test(testloader, True)
@@ -65,7 +65,9 @@ class GenericSolver:
 				# Save model
 				if self.save_every and self.iteration % self.save_every == 0:
 					self.save_checkpoint('iter-%d-acc-%f.pth.tar' % (self.iteration, self.acc))
+			toc = (time.time() - tic)
 			self._print('TRAIN_EP', self.train_loss.end_epoch())
+			print('EP tic toc (%f) %s' % (toc, str(datetime.timedelta(seconds=toc))))
 	
 	def _train_step(self, batch):
 		self.model.train()
@@ -83,10 +85,11 @@ class GenericSolver:
 		self.model.eval()
 		stats = self.test_loss(testloader)
 		self._print(testloader.dataset.name or 'TEST', stats)
-		if self.scheduler: self.scheduler.step(stats.loss)
-		if self.opts.get('save_best', False) and self.acc > self.best_acc:
-			self.save_checkpoint('best.pth')
-			self.best_acc = self.acc
+		if is_primary:
+			if self.scheduler: self.scheduler.step(stats.loss)
+			if self.save_best and stats.unrel_recall > self.best_val:
+				self.save_checkpoint('best.pth')
+				self.best_val = stats.unrel_recall
 
 	def _calc_recall_matlab(self):
 		recalls = self.evaluator.recall_from_matlab(self.model)
@@ -97,11 +100,14 @@ class GenericSolver:
 		torch.save({
 			'epoch': self.epoch,
 			'iteration': self.iteration,
-			'model_type': str(type(self.model)),
+			'model_type': str(self.model.__class__),
 			'state_dict': self.model.state_dict(),
 			'optimizer': self.optimizer.state_dict(),
 			'optimizer_type': str(type(self.optimizer)),
 			}, os.path.join(self.outdir or '', filename))
+		name, ext = os.path.splitext(filename)
+		torch.save({'model': self.model},
+			os.path.join(self.outdir or '', name+'whole'+ext))
 
 	def _print(self, dataname, loss_calculator):
 		sys.stdout.write('%12s (ep %3d: %5d/%d)' % (dataname, self.epoch, self.iteration, self.num_iterations))

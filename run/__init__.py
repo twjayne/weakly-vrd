@@ -40,8 +40,9 @@ parser.add_option('--test_every', dest='test_every', default=None, type='int')
 parser.add_option('--print_every', dest='print_every', default=None, type='int')
 parser.add_option('--save', dest='save_every', default=None, type='int')
 parser.add_option('--end-save', dest='save_at_end', default=False, action='store_true')
-parser.add_option('--save-best', dest='save_best', default=False, action='store_true')
-parser.add_option('--outdir', '--dir', '--logdir', dest='outdir', default=None, help="Used for saving checkpoints, etc.")
+parser.add_option('--nosave', dest='save_best', default=True, action='store_false')
+parser.add_option('--outdir', '--dir', '--logdir', dest='outdir', default='log', help="Used for saving logs, checkpoints, etc.")
+parser.add_option('--noprefix', dest='no_prefix', default=False, action='store_true', help='If true, don\'t include name in outdir')
 parser.add_option('--nosplitzs', dest='split_zeroshot', default=True, action='store_false')
 parser.add_option('--recall', dest='recall_every', default=0, type='int')
 parser.add_option('--load', dest='load', default=None, help='Model or state_dict to load')
@@ -57,14 +58,20 @@ class Runner(object):
 		self.solver = None
 		self.opts, self.args = parser.parse_args()
 		opts = self.opts
+		timestamp = datetime.datetime.now().strftime('%Y%m%d%H%M')
+		self.name = ('%s N-%d ep-%d lr-%f geom-%s' % (timestamp, opts.train_size or 0, opts.num_epochs, opts.lr, opts.geometry))
 		# Set logger
+		if self.opts.no_prefix:
+			log_name = self.name + '.log'
+		else:
+			log_name = 'out.log'
+			self.opts.outdir = os.path.join(self.opts.outdir or '', self.name)
 		if self.opts.logfile:
 			logger.Logger(self.opts.logfile)
 		elif self.opts.outdir:
-			logger.Logger(self.opts.outdir,
-				'%s N-%d ep-%d lr-%f geom-%s.log' %
-				(datetime.datetime.now().strftime('%Y%m%d%H%M'), opts.train_size or 0, opts.num_epochs, opts.lr, opts.geometry))
+			logger.Logger(self.opts.outdir, log_name)
 		print(opts)
+		print('PID %d' % (os.getpid(),))
 
 	def setup(self):
 		print('Init...')

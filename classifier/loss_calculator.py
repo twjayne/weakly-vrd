@@ -5,6 +5,7 @@ import math
 import sys
 import dataset
 import util.gpu
+from RecallEvaluator import RecallEvaluator
 
 import pdb
 
@@ -34,8 +35,8 @@ class LossCalculator(object):
 		self.init_batch()
 
 	# Computes final stats
-	def end_epoch(self):
-		stats = self.epoch_stats.compute()
+	def end_epoch(self, recall=None):
+		stats = self.epoch_stats.compute(recall)
 		self.init_epoch()
 		return stats
 
@@ -65,14 +66,20 @@ class LossCalculator(object):
 	def calc_on_dataloader(self, dataloader, verbose=True):
 		self.init_epoch()
 		if verbose: sys.stdout.write('test batch')
+		rev = RecallEvaulatorOverride()
 		for i, batch in enumerate(dataloader):
-			self(batch) # compute and accumulate stats for batch
+			predictions, targets = self.predict(batch)
+			rev.accumulate(predictions)
+			loss = self.calc_on_image(predictions, targets)
+			self.epoch_stats.accumulate(self.batch_stats)
 			assert isinstance(self.epoch_stats.sum_loss, float)
 			if verbose and i % 50 == 0:
 				mm = util.gpu.get_memory_map()
 				sys.stdout.write(' %d' % i)
+				sys.stdout.flush()
 		if verbose: print()
-		return self.end_epoch()
+		rev_recall = rev.compute()
+		return self.end_epoch(rev_recall)
 
 	# For the sake of recall, a batch is believed to be one image
 	# Set self.target, self.prediction, self.acc
@@ -145,13 +152,14 @@ class Stats(object):
 		self.correct_by_class += other.correct_by_class
 		self.n_example_by_class += other.n_example_by_class
 
-	def compute(self):
+	def compute(self, recall=None):
 		if self.n_example == 0:
 			import traceback
 			for line in traceback.format_stack(): print(line.strip())
 		self.loss = self.sum_loss / self.n_example
 		self.acc = self.correct_by_class.sum().item() / self.n_example
 		self._compute_recall()
+		if not isinstance(recall, type(None)): self.rec = torch.Tensor([recall])
 		return self
 
 	# unrel_recall : Number of correct predictions, divided by number of predictions (up to K per image). This biases frequently-seen classes.
@@ -169,3 +177,191 @@ class Stats(object):
 				self.rec2[row] = math.nan
 			else:
 				self.rec2[row] = recall_by_class_f[row,nonzero_classes].mean().item() # In case there are classes unrepresented in the dataset, this will give a more useful recall
+
+# Most of the code in this class is copied from Tyler's RecallEvaluator. See him for doc.
+# Tyler's RecallEvaluator is a translation of the MATLAB project for the paper "Weakly-supervised learning of visual relations"
+class RecallEvaulatorOverride(RecallEvaluator):
+	def accumulate(self, predictions):
+		o = predictions.cpu().data
+		if isinstance(self.predictions, type(None)):
+			self.predictions = o
+		else:
+			self.predictions = torch.cat((self.predictions, o))
+
+	def infer(self):
+		self.zeroshot = zeroshot
+		self.candidatespairs = 'annotated'
+		self.use_objectscores = False
+		pairs, scores, annotations = self.predict()
+		candidates, groundtruth = self.format_testdata_recall(pairs, scores, annotations)
+		recall_predicate, _ = self.top_recall_Relationship(self.Nre, candidates, groundtruth)
+		return recall_predicate
+
+	def predict(self):
+		annotations = self.get_full_annotations()
+		pairs = self.load_candidates(self.candidatespairs)
+		prediction = self.prediction
+		return (pairs, prediction, annotations)
+
+	def compute(self):
+		self.rev.prediction = self.predictions.numpy()[:,1:]
+		return self.rev.infer(0)
+
+	def top_recall_Relationship(self, Nre, candidates, groundtruth):
+		tuple_confs_cell = candidates['scores']
+		tuple_labels_cell = candidates['triplet']
+		sub_bboxes_cell = candidates['sub_box']
+		obj_bboxes_cell = candidates['obj_box']
+
+		gt_tuple_label = groundtruth['triplet']
+		gt_sub_bboxes = groundtruth['sub_box']
+		gt_obj_bboxes = groundtruth['obj_box']
+		# sort candidates by confidence scores
+		num_images = len(gt_tuple_label)
+		for i in range(num_images):
+			ind = tuple_confs_cell[i].argsort(axis=0)[::-1]
+			ind = np.squeeze(ind,axis=1)
+			if len(ind) >= Nre:
+				ind = ind[0:Nre]
+			tuple_confs_cell[i] = tuple_confs_cell[i][ind]
+
+
+
+			# print(f'sorted confidence: {tuple_confs_cell[i]}\n shape: {tuple_confs_cell[i].shape}')
+			# print(f'after cut: {tuple_confs_cell[i]}\n shape: {tuple_confs_cell[i].shape}')
+			# print(f'before: {tuple_labels_cell[i]}\n shape: {tuple_labels_cell[i].shape}')
+			tuple_labels_cell[i] = tuple_labels_cell[i][:,ind]
+			# print(f'after: {tuple_labels_cell[i]}\n shape: {tuple_labels_cell[i].shape}')
+			obj_bboxes_cell[i] = obj_bboxes_cell[i][ind,:]
+			# print(f'obj box: {obj_bboxes_cell[i]}\n shape: {obj_bboxes_cell[i].shape}')
+			sub_bboxes_cell[i] = sub_bboxes_cell[i][ind,:]
+			# print(f'sub box: {sub_bboxes_cell[i]}\n shape: {sub_bboxes_cell[i].shape}')
+
+		num_pos_tuple = 0
+		for i in range(num_images):
+			num_pos_tuple += len(gt_tuple_label[i][0])
+
+		tp_cell = []
+		fp_cell = []
+
+		gt_thr = 0.5
+
+		# count1 = 0
+		# count2 = 0
+		# count3 = 0
+		# count4 = 0
+		# count5 = 0
+
+		for i in range(num_images):
+			gt_tupLabel = gt_tuple_label[i]
+			gt_objBox = gt_obj_bboxes[i]
+			gt_subBox = gt_sub_bboxes[i]
+
+			num_gt_tuple = len(gt_tupLabel[0])
+			gt_detected = np.zeros(num_gt_tuple)
+
+			labels = tuple_labels_cell[i]
+			boxObj = obj_bboxes_cell[i]
+			boxSub = sub_bboxes_cell[i]
+
+			num_obj = len(labels[0])
+			tp = np.zeros([1, num_obj])
+			fp = np.zeros([1, num_obj])
+
+			for j in range(num_obj):
+
+				bbO = boxObj[j,:]
+				bbS = boxSub[j,:]
+				# for i in range(4):
+				#     bbO[i] = float(bbO[i])
+				#     bbS[i] = float(bbS[i])
+				ovmax = -math.inf
+				kmax = -1
+
+				for k in range(num_gt_tuple):
+					if np.linalg.norm(labels[:,j]-gt_tupLabel[:,k], 2) != 0:
+						# count1 += 1
+						# if i == 43: print(j+1,k+1,'case1',gt_detected, kmax)
+						continue
+					if gt_detected[k] > 0:
+						# if i == 43: print(j+1,k+1,'case2',gt_detected, kmax)
+						# count2 += 1
+
+						continue
+					# count3 += 1
+					# if i == 43: print(j+1,k+1,'case3',gt_detected, kmax)
+
+					bbgtO = gt_objBox[k,:]
+					bbgtS = gt_subBox[k,:]
+					# for i in range(4):
+					#     bbgtO[i] = float(bbgtO[i])
+					#     bbgtS[i] = float(bbgtS[i])
+					# print(f'i: {i}\nbbgtO: {bbgtO}\nbbO: {bbO}\nbbS: {bbS}\nbbgtS: {bbgtS}')
+					biO = [max([bbO[0],bbgtO[0]]), max([bbO[1],bbgtO[1]]), min([bbO[2],bbgtO[2]]), min([bbO[3],bbgtO[3]])]
+					# print(f'biO: {biO}')
+					iwO = float(biO[2]) - float(biO[0]) + 1
+					# print(f'iwO: {iwO}')
+					ihO = float(biO[3]) - float(biO[1]) + 1
+					# print(f'ihO: {ihO}')
+					biS = [max([bbS[0],bbgtS[0]]), max([bbS[1],bbgtS[1]]), min([bbS[2],bbgtS[2]]), min([bbS[3],bbgtS[3]])]
+					iwS = float(biS[2]) - float(biS[0]) + 1
+					ihS = float(biS[3]) - float(biS[1]) + 1
+					# print(f'biS: {biS}\niwS: {iwS}\nihS: {ihS}')
+					# print(f" biO: {biO}\n iwO: {iwO}\n ihO: {ihO}\n biS: {biS}\n iwS: {iwS}\n ihS: {ihS}\n")
+					if iwO > 0 and ihO > 0 and iwS > 0 and ihS > 0:
+						# compute overlap as area of intersection / area of union
+						# print(f'iwO: {iwO} ihO: {ihO} iwS: {iwS} ihS: {ihS}')
+						uaO = (bbO[2]-bbO[0]+1)*(bbO[3]-bbO[1]+1) + (bbgtO[2]-bbgtO[0]+1)*(bbgtO[3]-bbgtO[1]+1) - iwO*ihO
+						ovO = iwO * ihO / uaO
+						# print(f'uaO: {uaO}\novO: {ovO}')
+						uaS = (bbS[2]-bbS[0]+1) * (bbS[3]-bbS[1]+1) + (bbgtS[2]-bbgtS[0]+1) * (bbgtS[3]-bbgtS[1]+1) - (iwS*ihS)
+						ovS = iwS * ihS / uaS
+						ov = min([ovO,ovS])
+
+						# print(f'uaO: {uaO}\novO: {ovO}\nuaS: {uaS}\novS: {ovS}\nov: {ov}\n')
+						# print(f'ov: {ov}')
+						# count4 += 1
+						if ov >= gt_thr and ov > ovmax:
+							ovmax = ov
+							kmax = k
+							# count5 += 1
+				if kmax >= 0:
+					tp[:,j] = 1
+					gt_detected[kmax] = 1
+
+				else:
+					fp[:,j] = 1
+
+			tp_cell.append(tp)
+			fp_cell.append(fp)
+		# print(count1, count2, count3, count4, count5)
+		# print(f'tp_cell: {tp_cell}\ntype:{type(tp_cell)}')
+		# print(f'fp_cell: {fp_cell}\ntype:{type(fp_cell)}')
+		tp_all = np.asarray(tp_cell[0])
+		fp_all = np.asarray(fp_cell[0])
+		confs = np.asarray(tuple_confs_cell[0])
+		# print(f'tp_all: {tp_all} type: {type(tp_all)}, shape: {tp_all.shape}\nfp_all: {fp_all} type: {type(fp_all)} shape: {fp_all.shape}\nconfs: \n{confs} type: {type(confs)} shape: {confs.shape}')
+		for i in range(1,num_images):
+			tp_all = np.hstack((tp_all, tp_cell[i]))
+			fp_all = np.hstack((fp_all, fp_cell[i]))
+			confs = np.vstack((confs, tuple_confs_cell[i]))
+			# print(f'tp_all: {tp_all} type: {type(tp_all)}, shape: {tp_all.shape}\nfp_all: {fp_all} type: {type(fp_all)} shape: {fp_all.shape}\nconfs: \n{confs} type: {type(confs)} shape: {confs.shape}')
+
+
+		ind = confs.argsort(axis=0)[::-1]
+		ind = np.squeeze(ind,axis=1)
+		tp_all = tp_all[:,ind]
+		fp_all = fp_all[:,ind]
+
+
+		tp = np.cumsum(tp_all,axis=1)
+		fp = np.cumsum(fp_all,axis=1)
+		recall = tp / num_pos_tuple
+		precision = tp / (fp + tp)
+
+		top_recall = recall[:,-1][0]
+		top_recall = top_recall
+		ap = self.VOCap(recall, precision)
+		ap = ap*100
+
+		return top_recall, ap

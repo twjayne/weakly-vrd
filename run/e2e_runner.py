@@ -108,7 +108,8 @@ class Runner(shared.Runner):
 		# Initialize testset
 		if self.opts.do_validation:
 			self.testset = data.Dataset(split='test', pairs='annotated', transform=transform)
-			self.testloaders = [data.FauxDataLoader(self.testset, batch_size=self.opts.test_batch_size)]
+			batch_sampler = sampler.BatchSampler(sampler.SequentialSampler(self.testset), self.opts.test_batch_size, False) # make test set load without shuffling so that we can use Tyler's RecallEvaluator
+			self.testloaders = [data.FauxDataLoader(self.testset, sampler=batch_sampler)]
 		else:
 			print('No testset')
 			self.testloaders = []
