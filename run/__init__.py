@@ -12,7 +12,6 @@ import datetime
 
 import pdb
 
-import util.loss
 import util.logger as logger
 import dataset.dataset as dset
 import dataset.zeroshot as zeroshot

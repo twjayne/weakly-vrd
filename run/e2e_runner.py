@@ -35,7 +35,7 @@ parser.defaults['test_every'] = 2048
 class Model(unrel.Model):
 	def __init__(self, n_vis_features, *args, **kwargs):
 		super(Model, self).__init__(*args, **kwargs)
-		self.classifier = nn.Sequential(*list(self.classifier.children())[:-1], nn.Linear(4096, n_vis_features))
+		self.classifier = nn.Sequential(*(list(self.classifier.children())[:-1] + [nn.Linear(4096, n_vis_features)])) # Replace last layer of classifier for our desired output dimension
 		geom = [ int(x) for x in kwargs['opts'].geometry.split() ]
 		self.predicate_classifier = cls.sequential( geom, batchnorm=False )
 

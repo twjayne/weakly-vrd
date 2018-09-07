@@ -26,6 +26,7 @@ sys.path.append(os.path.realpath(os.path.join(__file__, '../..')))
 import unrel.unrel_data as unrel
 
 # Import faster-rcnn modules
+# Requries PYTHONPATH to point to faster-rcnn.pytorch-master/lib
 from model.roi_pooling.modules.roi_pool import _RoIPooling
 from model.roi_align.modules.roi_align import RoIAlignAvg
 from model.utils.config import cfg
