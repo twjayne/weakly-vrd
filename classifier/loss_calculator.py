@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
+import numpy as np
 import math
 import sys
 import dataset
@@ -181,6 +182,10 @@ class Stats(object):
 # Most of the code in this class is copied from Tyler's RecallEvaluator. See him for doc.
 # Tyler's RecallEvaluator is a translation of the MATLAB project for the paper "Weakly-supervised learning of visual relations"
 class RecallEvaulatorOverride(RecallEvaluator):
+	def __init__(self):
+		super(RecallEvaulatorOverride, self).__init__()
+		self.predictions = None
+
 	def accumulate(self, predictions):
 		o = predictions.cpu().data
 		if isinstance(self.predictions, type(None)):
@@ -188,8 +193,8 @@ class RecallEvaulatorOverride(RecallEvaluator):
 		else:
 			self.predictions = torch.cat((self.predictions, o))
 
-	def infer(self):
-		self.zeroshot = zeroshot
+	def compute(self):
+		self.zeroshot = False
 		self.candidatespairs = 'annotated'
 		self.use_objectscores = False
 		pairs, scores, annotations = self.predict()
@@ -200,12 +205,8 @@ class RecallEvaulatorOverride(RecallEvaluator):
 	def predict(self):
 		annotations = self.get_full_annotations()
 		pairs = self.load_candidates(self.candidatespairs)
-		prediction = self.prediction
+		prediction = self.predictions.numpy()[:,1:]
 		return (pairs, prediction, annotations)
-
-	def compute(self):
-		self.rev.prediction = self.predictions.numpy()[:,1:]
-		return self.rev.infer(0)
 
 	def top_recall_Relationship(self, Nre, candidates, groundtruth):
 		tuple_confs_cell = candidates['scores']
