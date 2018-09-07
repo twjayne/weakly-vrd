@@ -205,7 +205,7 @@ class RecallEvaulatorOverride(RecallEvaluator):
 	def predict(self):
 		annotations = self.get_full_annotations()
 		pairs = self.load_candidates(self.candidatespairs)
-		prediction = self.predictions.numpy()[:,1:]
+		prediction = self.predictions.numpy()
 		return (pairs, prediction, annotations)
 
 	def top_recall_Relationship(self, Nre, candidates, groundtruth):

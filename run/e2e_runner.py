@@ -28,7 +28,7 @@ parser.defaults['test_batch_size'] = 1
 assert parser.has_option('--outdir')
 parser.defaults['outdir'] = 'log/e2e/vgg16'
 assert parser.has_option('--geom')
-parser.defaults['geometry'] = '1400 600 300 71'
+parser.defaults['geometry'] = '1400 600 300 70'
 assert parser.has_option('--test_every')
 parser.defaults['test_every'] = 2048
 

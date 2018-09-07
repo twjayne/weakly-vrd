@@ -33,7 +33,7 @@ class Dataset(torch.utils.data.Dataset):
 		im_id = pairs[0]['im_id']
 		cats  = [pair[key] for pair in pairs for key in ('sub_cat', 'obj_cat')] # these alternate subject, object, ...
 		bbs   = [pair[key] for pair in pairs for key in ('subject_box', 'object_box')] # these alternate subject, object, ...
-		preds = [pair['rel_cat'] for pair in pairs]
+		preds = [pair['rel_cat']-1 for pair in pairs]
 		image = self.fetcher.image( im_id ) # PIL image
 		entities = self.fetcher.entities( im_id )
 		spatial  = self.fetcher.spatial( im_id, [p['rel_id'] for p in pairs] )

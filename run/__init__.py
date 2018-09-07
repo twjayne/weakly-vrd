@@ -70,6 +70,7 @@ class Runner(object):
 			logger.Logger(self.opts.logfile)
 		elif self.opts.outdir:
 			logger.Logger(self.opts.outdir, log_name)
+		print(sys.argv)
 		print(opts)
 		print('PID %d' % (os.getpid(),))
 
