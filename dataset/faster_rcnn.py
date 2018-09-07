@@ -61,6 +61,10 @@ class Dataset(torch.utils.data.Dataset):
 	def __iter__(self):
 		return _DataLoaderIter(self)
 
+	def triplets(self):
+		keys = ('sub_cat', 'rel_cat', 'obj_cat')
+		return [tuple([triplet[key] for key in keys]) for image in self._data for triplet in image]
+
 # Behaves like a dataloader but doesn't stack all fields (because some of them, such as images, may be of differing dimensions)
 class FauxDataLoader(torch.utils.data.DataLoader):
 	def __init__(self, dataset, **kwargs):

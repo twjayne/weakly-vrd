@@ -21,6 +21,7 @@ import pdb
 
 parser = shared.parser
 parser.add_option('--bp_every', dest='backprop_every', default=4, type='int') # Don't backprop on every 'batch'. Instead backprop after multiple batches.
+parser.add_option('--nowt', dest='weighted_loss', action='store_false', default=True)
 assert parser.has_option('--bs')
 parser.defaults['batch_size'] = 1
 assert parser.has_option('--tbs')
@@ -30,7 +31,7 @@ parser.defaults['outdir'] = 'log/e2e/vgg16'
 assert parser.has_option('--geom')
 parser.defaults['geometry'] = '1400 600 300 70'
 assert parser.has_option('--test_every')
-parser.defaults['test_every'] = 2048
+parser.defaults['test_every'] = 1024
 
 class Model(unrel.Model):
 	def __init__(self, n_vis_features, *args, **kwargs):
@@ -91,9 +92,22 @@ class Runner(shared.Runner):
 			self.scheduler = scheduler_lambda(self.optimizer) if scheduler_lambda else torch.optim.lr_scheduler.MultiStepLR(self.optimizer, [x * self.opts.backprop_every for x in [35, 75, 120, 200, 400, 600, 800]], 0.5)
 		if self.solver == None:
 			print('Building solver...')
-			train_loss = LossCalculator(self.model, input_key=lambda model, batch: model(batch), target_key='preds')
-			test_loss = LossCalculator(self.model, input_key=lambda model, batch: model(batch), target_key='preds')
-			self.solver = solver_lambda(self.model, self.optmizer, self.scheduler, loss_calculator, self.opts.__dict__) if solver_lambda else Solver(self.model, self.optimizer, verbose=True, scheduler=self.scheduler, train_loss=train_loss, test_loss=test_loss, **self.opts.__dict__)
+			if solver_lambda:
+				self.solver = solver_lambda(self.model, self.optmizer, self.scheduler, loss_calculator, self.opts.__dict__)
+			else:
+				if self.opts.weighted_loss:
+					print('Using weighted loss...')
+					pred_klasses = torch.Tensor(self.trainloader.dataset.triplets())[:,1] - 1
+					assert pred_klasses.max() == 69, pred_klasses.max()
+					assert pred_klasses.min() == 0,  pred_klasses.min()
+					weights = torch.histc(pred_klasses, bins=70, min=0, max=69)
+					train_loss_fn = nn.CrossEntropyLoss(weights)
+					train_loss = LossCalculator(self.model, input_key=lambda model, batch: model(batch), target_key='preds', loss_fn=train_loss_fn)
+				else:
+					print('NOT using weighted loss...')
+					train_loss = LossCalculator(self.model, input_key=lambda model, batch: model(batch), target_key='preds')
+				test_loss = LossCalculator(self.model, input_key=lambda model, batch: model(batch), target_key='preds')
+				self.solver = Solver(self.model, self.optimizer, verbose=True, scheduler=self.scheduler, train_loss=train_loss, test_loss=test_loss, **self.opts.__dict__)
 
 	def setup_data(self):
 		transform = unrel.TRANSFORM

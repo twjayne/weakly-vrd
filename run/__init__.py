@@ -76,9 +76,9 @@ class Runner(object):
 	def setup(self):
 		print('Init...')
 		self.setup_model()
-		self.setup_opt()
 		print('Initializing dataset(s)...')
 		self.setup_data()
+		self.setup_opt()
 
 	def setup_model(self):
 		# Define model
