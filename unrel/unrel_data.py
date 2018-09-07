@@ -20,8 +20,8 @@ _LEGAL_SPLITS = ['train', 'test']
 _LEGAL_PAIRS  = ['annotated', 'candidates']
 _LEGAL_SUPER  = ['full', 'weak']
 
-DEFAULT_UNRELDIR = '/home/SSD2/markham-data/unrel'
-DEFAULT_SGDIR    = '/home/SSD2/markham-data/sg_dataset'
+DEFAULT_UNRELDIR = os.environ.get('UNRELDIR','/home/SSD2/markham-data/unrel')
+DEFAULT_SGDIR    = os.environ.get('SGDIR','/home/SSD2/markham-data/sg_dataset')
 
 squeeze = lambda x: x.item() if isinstance(x,np.ndarray) and len(x) == 1 else x
 
