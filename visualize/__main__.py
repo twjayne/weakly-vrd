@@ -6,6 +6,7 @@
 # 	python plot.py ../log/*.log
 # E.g.
 # 	python plot.py ../log/overfit/noval/N-0\ ep-15\ lr-0\ geom-1000\ *hash*.log
+#	find log/ -name out.log -ctime -3 -printf '%C@\t%p\n' | sort -h | cut -f2 | python visualize
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -14,8 +15,11 @@ import os
 import sys
 import glob
 from optparse import OptionParser
+from collections import OrderedDict
 
 import pdb
+
+fileid_regex = re.compile(r'[^/]+/\d{12}')
 
 common_fields = [('name', np.str_, 16),
 	('epoch', np.int32),
@@ -40,31 +44,46 @@ REGEXES = [
 
 
 class Plotter(object):
-	def __init__(self, key, *fpaths):
-		self.key = key
-		self.labels = []
-		for fpath in fpaths:
-			plt.figure(fpath)
-			self.ax = plt.subplot()
-			plt.suptitle(key)
-			plt.title('%s-%s' % (fpath, key), fontsize=8)
-			self._line(fpath if type(fpath) is str else fpath[0])
-			self.ax.legend(self.labels)
-	def _line(self, fpath):
-		print('FPATH', fpath)
+	def __init__(self, opts, *fpaths):
+		self.field = opts.field
+		is_multiple_logs = not not opts.split
+		if is_multiple_logs:
+			print('multi figs')
+			label = lambda fpath: fileid_regex.search(fpath).group(0)
+			data  = lambda fpath: self.get_ordered_dict(fpath)[opts.split]
+			table = {label(fpath): data(fpath) for fpath in fpaths}
+			ordered_dict = OrderedDict(sorted(table.items(), key=lambda tup: len(tup[1]), reverse=True))
+			self.start_img(self.field)
+			self.line(ordered_dict)
+		else:
+			print('one fig')
+			for fpath in fpaths:
+				ordered_dict = self.get_ordered_dict(fpath)
+				self.start_img(fpath)
+				self.line(ordered_dict)
+
+	def get_ordered_dict(self, fpath):
 		for regex in REGEXES:
-			print('== trying regex %s' % (regex[0].pattern))
-			dat = np.fromregex(fpath, *regex)
-			if len(dat): break
-		if dat == None: raise Exception('no matches for any regex')
-		srcs = set(dat['name'])
-		subs = {src: dat[dat['name'] == src] for src in srcs}
-		srcs = sorted(subs, key=lambda x: len(subs[x]), reverse=True)
-		for src in srcs:
-			sub = subs[src]
-			print('N %12s %d' % (src, len(sub[self.key])))
-			self.ax.plot(sub['batch'], sub[self.key])
-			self.labels.append(src)
+			data = np.fromregex(fpath, *regex)
+			if len(data): break
+		if data == None: raise Exception('no matches for any regex')
+		names = set(data['name']) # TEST, TRAIN, TRAIN_BCH, TRAIN_EP, ...
+		# pdb.set_trace()
+		table = {name: data[data['name'] == name] for name in names}
+		return OrderedDict(sorted(table.items(), key=lambda tup: len(tup[1]), reverse=True))
+
+	def start_img(self, *title):
+		plt.figure('-'.join(title))
+		self.ax = plt.subplot()
+		plt.suptitle(self.field)
+		plt.title('-'.join(title), fontsize=8)
+
+	def line(self, ordered_dict):
+		for key in ordered_dict:
+			data = ordered_dict[key]
+			print('N %12s %d' % (key, len(ordered_dict[key])))
+			self.ax.plot(data['batch'], data[self.field])
+		self.ax.legend(ordered_dict.keys())
 
 
 
@@ -72,13 +91,14 @@ if __name__ == '__main__':
 	# Parse command line args
 	parser = OptionParser()
 	parser.add_option('-f', '--field', dest='field', default='acc')
+	parser.add_option('-s', '--split', dest='split', default=None)
 	parser.add_option('-l', '--last', dest='latest_only', action='store_true', default=False)
 	opts, args = parser.parse_args()
 	# Get logfiles
-	fpaths = glob.glob('log/*.log') if len(args) == 0 else args
-	if opts.latest_only:
-		latest_file = max(fpaths, key=os.path.getctime)
-		fpaths = [latest_file]
+	fpaths = args if args else sys.stdin.read().strip().split('\n')
 	# Run
-	Plotter(opts.field, *fpaths)
+	for fpath in fpaths:
+		print(fpath)
+	print('.......')
+	Plotter(opts, *fpaths)
 	plt.show()
