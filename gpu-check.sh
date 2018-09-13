@@ -15,8 +15,9 @@ printf '%3s %8s ' GPU GMEM
 head -n1 <<< "$PS"
 
 # Print BODY ROWS
-while read -r row; do
-	pid=$(tr -s ' ' <<< "$row" | cut -d' ' -f1)
+# Declare IFS to avoid default behaviour of discarding initial whitespace
+while IFS=$'\n' read -r row; do
+	pid=$(sed 's/^ \+//g' <<< "$row" | tr -s ' ' | cut -d' ' -f1)
 	while read -a nvidia; do
 		printf '%3s %8s %s\n' "${nvidia[0]}" "${nvidia[1]}" "$row" | cut -c1-$COLS
 	done < <(grep $pid <<< "$SMI" | cut -f2,6)
