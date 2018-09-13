@@ -90,6 +90,11 @@ class GenericSolver:
 			if self.save_best and stats.unrel_recall > self.best_val:
 				self.save_checkpoint('best.pth')
 				self.best_val = stats.unrel_recall
+				torch.save({
+					'tp': stats.tp,
+					'fp': stats.fp,
+					'n' : stats.n_example,
+					}, os.path.join(self.outdir or '', 'recall.pth'))
 
 	def _calc_recall_matlab(self):
 		recalls = self.evaluator.recall_from_matlab(self.model)
@@ -109,13 +114,14 @@ class GenericSolver:
 		torch.save({'model': self.model},
 			os.path.join(self.outdir or '', name+'whole'+ext))
 
-	def _print(self, dataname, loss_calculator):
+	def _print(self, dataname, stats):
 		sys.stdout.write('%12s (ep %3d: %5d/%d)' % (dataname, self.epoch, self.iteration, self.num_iterations))
-		sys.stdout.write(' : loss %e : acc %.3f' % (loss_calculator.loss, loss_calculator.acc))
-		for tensor in (loss_calculator.rec, loss_calculator.rec2, loss_calculator.unrel_recall):
+		sys.stdout.write(' : loss %e : acc %.3f' % (stats.loss, stats.acc))
+		for tensor in (stats.rec, stats.rec2, stats.unrel_recall):
 			sys.stdout.write(' : R@')
 			for rec in tensor: sys.stdout.write(' %.3f' % rec)
 		print()
+		sys.stdout.flush()
 
 	def debug(self):
 		print('%20s %s' % ('optimizer', str(self.optimizer),))
