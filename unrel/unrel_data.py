@@ -10,9 +10,9 @@ import sys, os
 import numpy as np
 import torch
 import scipy.io
-import skimage.io
 import PIL
-import matplotlib.pyplot as plt
+if os.environ.get('DISPLAY'):
+	import matplotlib.pyplot as plt
 
 import pdb
 
@@ -79,9 +79,7 @@ class _Fetcher(object):
 			selected_pairs = [i for i in range(spatial.shape[0]) if spatial[i,0] in rel_ids]
 			spatial = spatial[selected_pairs,:] # Select rows for given pair (aka rel)
 			assert len(rel_ids) == spatial.shape[0]
-			return torch.from_numpy(spatial[:,1:])
-		else:
-			return torch.from_numpy(spatial[:,1:])
+		return torch.from_numpy(spatial[:,1:])
 
 	def bbs(self, im_id):
 		bbs = [ent.bb() for ent in self.entities(im_id)]
