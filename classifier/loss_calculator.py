@@ -72,7 +72,7 @@ class LossCalculator(object):
 			predictions, targets = self.predict(batch)
 			rev.accumulate(predictions)
 			loss = self.calc_on_image(predictions, targets)
-			self.epoch_stats.accumulate(self.batch_stats)
+			self.epoch_stats.accumulate(self.end_batch())
 			assert isinstance(self.epoch_stats.sum_loss, float)
 			if verbose and i % 50 == 0:
 				mm = util.gpu.get_memory_map()
@@ -106,7 +106,10 @@ class LossCalculator(object):
 			for i, yes in enumerate(is_correct):
 				klass = top_k_targets[i]
 				self.batch_stats.n_example_by_class[recall_row, klass] += 1
-				if yes: self.batch_stats.correct_by_class[recall_row, klass] += 1
+				if yes:
+					self.batch_stats.tp[recall_row, klass] += 1
+				else:
+					self.batch_stats.fp[recall_row, klass] += 1
 		# Return
 		return loss
 
@@ -144,13 +147,15 @@ class Stats(object):
 	def __init__(self, recall_rows, n_klasses):
 		self.sum_loss  = 0
 		self.n_example = 0
-		self.correct_by_class   = torch.zeros(recall_rows, n_klasses, dtype=torch.int32)
-		self.n_example_by_class = torch.zeros_like(self.correct_by_class)
+		self.tp = torch.zeros(recall_rows, n_klasses, dtype=torch.int32)
+		self.fp = torch.zeros_like(self.tp)
+		self.n_example_by_class = torch.zeros_like(self.tp)
 
 	def accumulate(self, other):
 		self.sum_loss += other.sum_loss
 		self.n_example += other.n_example
-		self.correct_by_class += other.correct_by_class
+		self.tp += other.tp
+		self.fp += other.fp
 		self.n_example_by_class += other.n_example_by_class
 
 	def compute(self, recall=None):
@@ -158,7 +163,7 @@ class Stats(object):
 			import traceback
 			for line in traceback.format_stack(): print(line.strip())
 		self.loss = self.sum_loss / self.n_example
-		self.acc = self.correct_by_class.sum().item() / self.n_example
+		self.acc = self.tp.sum().item() / self.n_example
 		self._compute_recall()
 		if not isinstance(recall, type(None)): self.rec = torch.Tensor([recall])
 		return self
@@ -167,8 +172,8 @@ class Stats(object):
 	# rec          : Recall is computed class-by-class, then averaged. (It will be nan if not all classes have been seen.)
 	# rec2         : Same as `rec`, but only classes have have been seen are used to compute the average.
 	def _compute_recall(self):
-		self.unrel_recall = self.correct_by_class.sum(1).float() / self.n_example_by_class.sum(1).float()
-		recall_by_class_f = self.correct_by_class.float() / self.n_example_by_class.float()
+		self.unrel_recall = self.tp.sum(1).float() / self.n_example_by_class.sum(1).float()
+		recall_by_class_f = self.tp.float() / self.n_example_by_class.float()
 		self.rec = recall_by_class_f.mean(1)
 		N = self.n_example_by_class.shape[0]
 		self.rec2 = torch.zeros_like(self.rec)
