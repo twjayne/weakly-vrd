@@ -1,3 +1,4 @@
+__import__(__package__ or '__init__')
 import torch
 assert torch.__version__.startswith('0.4'), 'wanted version 0.4, got %s' % torch.__version__
 import torch.utils.data.dataset
@@ -9,7 +10,7 @@ import util.config as config
 if __name__ == '__main__':
     from example import BasicExample
 else:
-    from .example import BasicExample
+    from dataset.example import BasicExample
 import pdb
 
 

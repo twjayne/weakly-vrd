@@ -23,7 +23,10 @@ class Dataset(torch.utils.data.Dataset):
 		self.name     = kwargs.get('name', None) # For logging
 		self.xform    = kwargs.get('transform', kwargs.get('xform', unrel.TRANSFORM))
 		self.fetcher  = unrel_data.Builder().split(self.split, self.pairs)
-		self._init()
+		if '_data' in kwargs:
+			self._data = kwargs.get('_data', None)
+		else:
+			self._init()
 
 	def __len__(self):
 		return len( self._data )
@@ -33,33 +36,45 @@ class Dataset(torch.utils.data.Dataset):
 		im_id = pairs[0]['im_id']
 		cats  = [pair[key] for pair in pairs for key in ('sub_cat', 'obj_cat')] # these alternate subject, object, ...
 		bbs   = [pair[key] for pair in pairs for key in ('subject_box', 'object_box')] # these alternate subject, object, ...
-		preds = [pair['rel_cat']-1 for pair in pairs]
 		image = self.fetcher.image( im_id ) # PIL image
 		entities = self.fetcher.entities( im_id )
 		spatial  = self.fetcher.spatial( im_id, [p['rel_id'] for p in pairs] )
 		if self.xform: image = self.xform(image)
 		if isinstance(image, torch.Tensor): assert len(image.shape) == 4, image.shape
-		return {
-			'preds':   torch.tensor(preds),  # the 1st one relates to the 1st TWO cats/bbs; the 2nd one relates to the 2nd TWO cats/bbs, etc. 
+		imdata = {
 			'cats':    torch.tensor(cats),   # category ids for subj,obj (i.e. class labes)
 			'bbs':     torch.stack(bbs, 0),  # bounding boxes (x1, y1, x2, y2)
 			'spatial': spatial,              # a dict of (sub_id,obj_id) => 400-d features for all candidate pairs in this image
 			'image':   image,
 			'imid':    im_id,
 		}
+		if self.pairs == 'annotated': # because 'candidates' does not supply rel_cat
+			preds = [pair['rel_cat']-1 for pair in pairs]
+			imdata['preds'] = torch.tensor(preds) # the 1st one relates to the 1st TWO cats/bbs; the 2nd one relates to the 2nd TWO cats/bbs, etc. 
+		return imdata
 
 	def _init(self):
 		matlab = scipy.io.loadmat(os.path.join(self.metadir, self.split, self.pairs, 'pairs.mat'))['pairs'][0,0]
 		self._keys = matlab.dtype.names
+		# Map im_id => [{}, {}, {}, ...]
 		map_from_matlab = { im_id.item() : [] for im_id in matlab['im_id'] }
 		get = lambda key, i: torch.from_numpy(matlab[key][i].astype(np.int32)) if len(matlab[key][i]) > 1 else matlab[key][i].item()
 		for i in range(len(matlab['im_id'])):
 			im_id = matlab['im_id'][i].item()
 			map_from_matlab[im_id].append( { key: get(key,i) for key in self._keys } )
-		self._data = list(map_from_matlab.values())
+		self._data = list(map_from_matlab.values()) # list of lists, where each sublist holds all pairs for a single image. The indices in the superlist do *not* correspond to im_id
+		print('%d images in dataset' % len(self._data))
+		print('%d pairs in dataset' % np.sum([len(x) for x in self._data]))
 
 	def __iter__(self):
 		return _DataLoaderIter(self)
+
+	def save(self, fpath):
+		torch.save({
+			'_data': self._data,
+			'pairs': self.pairs,
+			'split': self.split,
+		}, fpath)
 
 	def triplets(self):
 		keys = ('sub_cat', 'rel_cat', 'obj_cat')
