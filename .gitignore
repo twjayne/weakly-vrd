@@ -10,3 +10,4 @@ log.*
 faster-rcnn
 source
 *.png
+tmp.*

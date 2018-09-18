@@ -84,15 +84,19 @@ class Runner(object):
 		# Define model
 		if self.model == None:
 			if self.opts.load:
-				print('Loading model')
-				from_file = torch.load(self.opts.load)
-				if isinstance(from_file, torch.nn.Module):
-					self.model = from_file
-				else:
-					self.model = self._build_model()
-					self.model.load_state_dict(from_file)
+				self._load_model()
+			elif self.model == None:
+				self.model = self._build_model()
+
+	def _load_model(self):
+		if self.opts.load:
+			print('Loading model')
+			from_file = torch.load(self.opts.load)
+			if isinstance(from_file, torch.nn.Module):
+				self.model = from_file
 			else:
 				self.model = self._build_model()
+				self.model.load_state_dict(from_file)
 
 	def _build_model(self):
 		print('Building model')
@@ -106,11 +110,11 @@ class Runner(object):
 					yield nn.BatchNorm1d(layer_widths[i])
 					yield nn.ReLU()
 		layers = list(model_generator(layer_widths, self.opts.train_size == 1))
-		model = nn.Sequential(*layers).double()
+		self.model = nn.Sequential(*layers).double()
 		if self.opts.save_initialized_model:
 			print('Saving initialized model to %s' % (self.opts.save_initialized_model,))
 			torch.save(self.model, self.opts.save_initialized_model)
-		return model
+		return self.model
 
 	def setup_opt(self):
 		# Define optimizer, scheduler, solver

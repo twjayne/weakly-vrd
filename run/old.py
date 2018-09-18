@@ -20,7 +20,7 @@ from classifier.loss_calculator import LossCalculator
 import pdb
 
 parser = shared.parser
-parser.add_option('--bp_every', dest='backprop_every', default=64, type='int') # Don't backprop on every 'batch'. Instead backprop after multiple batches.
+parser.add_option('--bp_every', dest='backprop_every', default=4, type='int') # Don't backprop on every 'batch'. Instead backprop after multiple batches.
 parser.add_option('--nowt', dest='weighted_loss', action='store_false', default=True)
 assert parser.has_option('--lr')
 parser.defaults['batch_size'] = 0.00001
@@ -45,10 +45,6 @@ class Model(unrel.Model):
 
 	def forward(self, batch):
 		appearance_features = super(Model, self).forward(batch)
-		if appearance_features.dim() < 2:
-			print('Uh oh. Weird appearance features batch %s' % (str(appearance_features.shape),))
-			appearance_features.unsqueeze_(0)
-		appearance_features = self.apperance_normalizer( appearance_features )
 		# Get spatial features
 		spatial_features = batch['spatial'].float().cuda()
 		if len(spatial_features.shape) > 2: spatial_features.unsqueeze_(0) # kludge. find out why dimensions are inconsistent
@@ -64,17 +60,16 @@ class Solver(generic_solver.GenericSolver):
 		super(Solver, self).__init__(*args, **kwargs)
 		self.verbose = False
 		self.optimizer.zero_grad()
-		self.batch_example_ct = 0
 
 	def _train_step(self, batch):
 		self.model.train()
 		loss = self.train_loss(batch)
 		loss.backward()
-		self.batch_example_ct += batch['preds'].shape[0]
-		if self.batch_example_ct >= self.opts.get('backprop_every'): # If this is not the first iteration and we have enough iterations to merit a backprop
+		if self.iteration and self.iteration % self.opts.get('backprop_every') == 0: # If this is not the first iteration and we have enough iterations to merit a backprop
 			self.optimizer.step()
 			self.optimizer.zero_grad()
-			self.batch_example_ct = 0
+			self.pairs_n = 0
+			self.loss = 0
 		if self.iteration % self.print_every == 0:
 			self._print('TRAIN_BCH', self.train_loss.end_batch())
 		if self.scheduler and testloader is None:
