@@ -25,7 +25,7 @@ class Dataset(torch.utils.data.Dataset):
 		self.fetcher  = unrel_data.Builder().split(self.split, self.pairs)
 		if '_data' in kwargs:
 			self._data = kwargs.get('_data', None)
-		else:
+		elif kwargs.get('init', True):
 			self._init()
 
 	def __len__(self):
@@ -54,7 +54,7 @@ class Dataset(torch.utils.data.Dataset):
 		return imdata
 
 	def _init(self):
-		matlab = scipy.io.loadmat(os.path.join(self.metadir, self.split, self.pairs, 'pairs.mat'))['pairs'][0,0]
+		matlab = self._get_pairs()
 		self._keys = matlab.dtype.names
 		# Map im_id => [{}, {}, {}, ...]
 		map_from_matlab = { im_id.item() : [] for im_id in matlab['im_id'] }
@@ -65,6 +65,15 @@ class Dataset(torch.utils.data.Dataset):
 		self._data = list(map_from_matlab.values()) # list of lists, where each sublist holds all pairs for a single image. The indices in the superlist do *not* correspond to im_id
 		print('%d images in dataset' % len(self._data))
 		print('%d pairs in dataset' % np.sum([len(x) for x in self._data]))
+
+	def _get_meta(self, name, **opts):
+		metadir = opts.get('metadir', self.metadir)
+		split   = opts.get('split', self.split)
+		pairs   = opts.get('pairs', self.pairs)
+		return scipy.io.loadmat(os.path.join(metadir, split, pairs, '%s.mat' % name))[name][0,0]
+
+	def _get_pairs(self, **opts):
+		return self._get_meta('pairs', **opts)
 
 	def __iter__(self):
 		return _DataLoaderIter(self)
