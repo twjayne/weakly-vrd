@@ -37,7 +37,6 @@ class Dataset(torch.utils.data.Dataset):
 		cats  = [pair[key] for pair in pairs for key in ('sub_cat', 'obj_cat')] # these alternate subject, object, ...
 		bbs   = [pair[key] for pair in pairs for key in ('subject_box', 'object_box')] # these alternate subject, object, ...
 		image = self.fetcher.image( im_id ) # PIL image
-		entities = self.fetcher.entities( im_id )
 		spatial  = self.fetcher.spatial( im_id, [p['rel_id'] for p in pairs] )
 		if self.xform: image = self.xform(image)
 		if isinstance(image, torch.Tensor): assert len(image.shape) == 4, image.shape

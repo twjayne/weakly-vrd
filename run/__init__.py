@@ -157,5 +157,11 @@ class Runner(object):
 			self.testloaders = []
 
 	def train(self):
+		print('Model file:', self.model.__file__)
+		print('Trainset file:', self.trainloader.dataset.__file__)
+		print('Trainloader file:', self.trainloader.__file__)
+		for testloader in self.testloaders:
+			print('Testset file:', testloader.dataset.__file__)
+			print('Testloader file:', testloader.__file__)	
 		print('Training...')
 		self.solver.train(self.trainloader, *self.testloaders)

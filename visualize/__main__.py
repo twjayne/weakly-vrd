@@ -9,11 +9,13 @@
 #	find log/ -name out.log -ctime -3 -printf '%C@\t%p\n' | sort -h | cut -f2 | python visualize
 
 import numpy as np
+import sys, os, re, glob, time
+NOSCREEN = '-n' in sys.argv
+if NOSCREEN:
+	print('no screen')
+	import matplotlib as mpl
+	mpl.use('Agg')
 import matplotlib.pyplot as plt
-import re
-import os
-import sys
-import glob
 from optparse import OptionParser
 from collections import OrderedDict
 
@@ -49,7 +51,7 @@ class Plotter(object):
 		is_multiple_logs = not not opts.split
 		if is_multiple_logs:
 			print('multi figs')
-			label = lambda fpath: fileid_regex.search(fpath).group(0)
+			label = lambda fpath: self.get_fileid(fpath)
 			data  = lambda fpath: self.get_ordered_dict(fpath)[opts.split]
 			table = {label(fpath): data(fpath) for fpath in fpaths}
 			ordered_dict = OrderedDict(sorted(table.items(), key=lambda tup: len(tup[1]), reverse=True))
@@ -62,11 +64,20 @@ class Plotter(object):
 				self.start_img(fpath)
 				self.line(ordered_dict)
 
+	def get_fileid(self, fpath):
+		match = fileid_regex.search(fpath)
+		if match:
+			return match.group(0)
+		else:
+			dirid = os.path.basename(os.path.dirname(fpath))
+			timestamp = time.strftime('%Y%m%d%H%M', time.localtime(os.path.getmtime(fpath)))
+			return '%s/%s' % (dirid, timestamp)
+
 	def get_ordered_dict(self, fpath):
 		for regex in REGEXES:
 			data = np.fromregex(fpath, *regex)
 			if len(data): break
-		if data == None: raise Exception('no matches for any regex')
+		if data == None: raise Exception('no matches for any regex (%s)' % (fpath,))
 		names = set(data['name']) # TEST, TRAIN, TRAIN_BCH, TRAIN_EP, ...
 		# pdb.set_trace()
 		table = {name: data[data['name'] == name] for name in names}
@@ -81,7 +92,7 @@ class Plotter(object):
 	def line(self, ordered_dict):
 		for key in ordered_dict:
 			data = ordered_dict[key]
-			print('N %12s %d' % (key, len(ordered_dict[key])))
+			print('line N %12s %d' % (key, len(ordered_dict[key])))
 			self.ax.plot(data['batch'], data[self.field])
 		self.ax.legend(ordered_dict.keys())
 
@@ -93,6 +104,7 @@ if __name__ == '__main__':
 	parser.add_option('-f', '--field', dest='field', default='acc')
 	parser.add_option('-s', '--split', dest='split', default=None)
 	parser.add_option('-l', '--last', dest='latest_only', action='store_true', default=False)
+	parser.add_option('-n', '--noscreen', dest='no_screen', action='store_true')
 	opts, args = parser.parse_args()
 	# Get logfiles
 	fpaths = args if args else sys.stdin.read().strip().split('\n')
@@ -101,4 +113,7 @@ if __name__ == '__main__':
 		print(fpath)
 	print('.......')
 	Plotter(opts, *fpaths)
-	plt.show()
+	if NOSCREEN:
+		plt.savefig('%s.png' % opts.field)
+	else:
+		plt.show()

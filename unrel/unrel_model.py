@@ -45,6 +45,7 @@ class Model(nn.Module):
 		self.RoIPooling = _RoIPooling(cfg.POOLING_SIZE, cfg.POOLING_SIZE, spatial_scale) # This needs to be the ratio of imdata.shape to the shape of the feature map at the end of the convolutional layers. This is architecture-dependent, not image-dependent (though a pixel here or there can cause some small shift in the true ratio).
 		self.RoIAlign   = RoIAlignAvg(cfg.POOLING_SIZE, cfg.POOLING_SIZE, spatial_scale)
 
+	# @arg batch should be a dict with keys 'image' and 'bbs'. The values for these keys should be lists of tensors. (One image's bbs should all be in the same tensor.) Using lists allows the images to be different sizes.
 	def forward(self, batch):
 		# Extract features
 		images_features = [self.features(self._do_cuda(image)) for image in batch['image']]

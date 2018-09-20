@@ -109,7 +109,8 @@ class LossCalculator(object):
 				if yes:
 					self.batch_stats.tp[recall_row, klass] += 1
 				else:
-					self.batch_stats.fp[recall_row, klass] += 1
+					guess_klass = top_k_preds[i]
+					self.batch_stats.fp[recall_row, guess_klass] += 1
 		# Return
 		return loss
 
