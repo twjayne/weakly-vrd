@@ -20,10 +20,11 @@ class Base(object):
 		self.roimaps_dir           = os.path.join(self.fetcher.metadir, self.split, 'roimaps_gt_0.7')
 		return self.fetcher, self.im_ids
 
-# Read all files in the 'unlabelled_boxes' directory (which should have been
-# populated by the MATLAB script compute_additional_candidates.m). Create a
-# dictionary which maps obj_id to a list of all region proposals from
-# 'unlabelled_boxes' which have an IoU > 0.7 with any ground-truth BB.
+# Read each file in the 'unlabelled_boxes' directory (which should have been
+# populated by the MATLAB script compute_additional_candidates.m). For each
+# file, create a dictionary which maps obj_id to a list of all region
+# proposals from 'unlabelled_boxes' which have an IoU > 0.7 with any ground-
+# truth BB; write that dictionary to a pickle file.
 class RoiMapper(Base):
 	def run(self):
 		# Load 'annotated' data
@@ -80,10 +81,10 @@ class RoiMapUser(Base):
 		return roimap
 	def save_to_file(self, save, default_name, save_obj):
 		if save:
-			logging.info('saving...')
-			savedir = os.path.join(self.fetcher.metadir, self.split, 'augmented')
-			os.makedirs(savedir, exist_ok=True)
+			savedir   = os.path.join(self.fetcher.metadir, self.split, 'augmented')
 			save_path = os.path.join(savedir, default_name) if isinstance(save,bool) else save
+			logging.info('saving (%s) ...' % save_path)
+			os.makedirs(savedir, exist_ok=True)
 			scipy.io.savemat(save_path, save_obj)
 		
 # Given an roimap from RoiMapper, build a new pairs array (i.e. dataset).
@@ -95,14 +96,17 @@ class RoiMapUser(Base):
 # differ *only* in their 'subject_box' or 'object_box'.
 class PairsBuilder(RoiMapUser):
 	def run(self, save=True):
+		logging.info('starting pairs...')
 		self.pairs  = self.fetcher._pairs
 		self.keys   = self.pairs.dtype.names # ('im_id', 'rel_id', 'sub_id', 'obj_id', 'sub_cat', 'rel_cat', 'obj_cat', 'subject_box', 'object_box')
 		n_gt        = len(self.pairs['rel_id'])
 		# Build additional pairs from roimap, yielding a list of tuples which hold pair data s.t. they can be passed to a constructor for a numpy structured array
 		augmented_pairs_tups = [pair_tup for gt_idx in range(n_gt) for pair_tup in self.augmented_pairs_for_gt(gt_idx)]
 		# Build numpy structured array
-		augmented_pairs = np.array(augmented_pairs_tups, dtype=self.pairs.dtype)
-		logging.info(' '.join([str(d) for d in augmented_pairs.shape]))
+		augmented_pairs = tuples2dict(augmented_pairs_tups, self.keys)
+		logging.info(' '.join([str(d) for d in augmented_pairs['rel_id'].shape]))
+		ag = augmented_pairs
+		# pdb.set_trace()
 		# Save to file
 		if save: self.save_to_file(save, 'pairs.mat', {'pairs':augmented_pairs})
 		return augmented_pairs
@@ -128,7 +132,7 @@ class PairsBuilder(RoiMapUser):
 		sub_bbs       = [sub_gt_bb] + sub_proposals
 		obj_bbs       = [obj_gt_bb] + obj_proposals
 		# Collect pair tuples for all combinations of subject BBs and object BBs
-		attr      = lambda key, sbb, obb: sbb if key == 'subject_box' else obb if key == 'object_box' else self.pairs[key][gt_idx].item()
+		attr      = lambda key, sbb, obb: sbb.astype(np.uint16) if key == 'subject_box' else obb.astype(np.uint16) if key == 'object_box' else self.pairs[key][gt_idx].item()
 		rank      = np.array([srank + orank  for srank in sub_ranks for orank in obj_ranks])
 		rank_idxs = np.argsort(-rank)[:K]
 		pair_tups = [tuple([attr(key, sbb, obb) for key in self.keys]) for sbb in sub_bbs for obb in obj_bbs]
@@ -141,27 +145,36 @@ class PairsBuilder(RoiMapUser):
 # 'object_box'.
 class ObjectsBuilder(RoiMapUser):
 	def run(self, save=True):
+		logging.info('starting objects...')
 		self.objects = self.fetcher.objects
 		self.keys    = self.objects.dtype.names
 		n_gt         = len(self.objects['obj_id'])
+		print(self.objects.dtype)
 		# Build additional objects from roimap, yielding a list of tuples which hold object data s.t. they can be passed to a constructor for a numpy structured array
 		augmented_objects_tups = [object_tup for gt_idx in range(n_gt) for object_tup in self.augmented_objects_for_gt(gt_idx)]
 		# Build numpy structured array
-		augmented_objects = np.array(augmented_objects_tups, dtype=self.objects.dtype)
-		logging.info(' '.join([str(d) for d in augmented_objects.shape]))
+		augmented_objects = tuples2dict(augmented_objects_tups, self.keys)
+		logging.info(' '.join([str(d) for d in augmented_objects['obj_id'].shape]))
 		# Save to file
 		if save: self.save_to_file(save, 'objects.mat', {'objects':augmented_objects})
 		return augmented_objects
 	def augmented_objects_for_gt(self, gt_idx, K=10):
 		# Get BBs from proposals
 		obj_id      = self.objects['obj_id'][gt_idx].item()
-		proposals   = self.roimap[obj_id] if obj_id in self.roimap else []
+		proposals   = [tup[0][:-1].astype(np.uint16) for tup in self.roimap[obj_id]] if obj_id in self.roimap else []
 		# List gt and propsal BBs
 		bbs         = [self.objects['object_box'][gt_idx]] + proposals[:K] # limit to top 10
 		# Build object tuples for all bbs
 		attr        = lambda key, bb: bb if key == 'object_box' else self.objects[key][gt_idx]
 		object_tups = [tuple([attr(key, bb) for key in self.keys]) for bb in bbs]
 		return object_tups
+
+
+# Make a dict of numpy arrays in preparation for saving as a matlab datafile.
+# Add extra dimensions because the UnRel pairs.mat files have it.
+def tuples2dict(tuples, keys):
+	getarray = lambda field_i : np.expand_dims(np.array( [tup[field_i] for tup in tuples] ).astype(np.uint16), -1)
+	return { keys[field_i]: getarray(field_i) for field_i in range(len(keys)) }
 
 def load_pickle(fpath):
 	with open(fpath, 'rb') as f:
@@ -171,21 +184,6 @@ def load_pickle(fpath):
 # Demo
 if __name__ == '__main__':
 	logging.getLogger().setLevel(logging.INFO)
-	# roimap = RoiMapper().run()
-	# with open('roimap.pickle','wb') as f:
-	# 	pickle.dump(roimap, f)
-	# with open('roimap.pickle') as f:
-	# 	roimap = pickle.load(f)
-	# augmented_pairs = PairsBuilder(roimap).run(True)
-	# objects = ObjectsBuilder(roimap).run(True)
-	pb = ObjectsBuilder()
-	# pb = PairsBuilder()
-	pb.run()
-
-
-'''
-from unrel.augment_annotated_pairs import *
-logging.getLogger().setLevel(logging.INFO)
-pb = PairsBuilder()
-pb.run()
-'''
+	roimap = RoiMapper().run()
+	augmented_pairs = PairsBuilder().run(True)
+	objects = ObjectsBuilder().run(True)
